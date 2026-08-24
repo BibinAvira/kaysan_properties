@@ -99,9 +99,6 @@ class MoreView extends ConsumerWidget {
                     value: ThemeMode.light,
                     icon: Icon(Icons.light_mode, size: 16)),
                 ButtonSegment<ThemeMode>(
-                    value: ThemeMode.system,
-                    icon: Icon(Icons.brightness_auto, size: 16)),
-                ButtonSegment<ThemeMode>(
                     value: ThemeMode.dark,
                     icon: Icon(Icons.dark_mode, size: 16)),
               ],

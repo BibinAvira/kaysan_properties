@@ -4,13 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const String _themePrefKey = 'theme_mode';
 
-/// Controller for the app's light/dark/system theme preference. Persists
-/// the choice so it survives app restarts.
+/// Controller for the app's light/dark theme preference. Defaults to light
+/// regardless of the device's system theme, and persists the user's choice
+/// so it survives app restarts.
 class ThemeModeController extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
     _restore();
-    return ThemeMode.system;
+    return ThemeMode.light;
   }
 
   Future<void> _restore() async {
@@ -19,7 +20,7 @@ class ThemeModeController extends Notifier<ThemeMode> {
     if (saved != null) {
       state = ThemeMode.values.firstWhere(
         (ThemeMode m) => m.name == saved,
-        orElse: () => ThemeMode.system,
+        orElse: () => ThemeMode.light,
       );
     }
   }

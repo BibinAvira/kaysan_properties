@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kaysan_properties/core/auth/guest_gate.dart';
 import 'package:kaysan_properties/core/utils/validators.dart';
 import 'package:kaysan_properties/models/supporting_models.dart';
 import 'package:kaysan_properties/providers/enquiry_provider.dart';
@@ -35,6 +36,8 @@ class _EnquiryFormState extends ConsumerState<EnquiryForm> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!await requireAuth(context, ref)) return;
+    if (!mounted) return;
     final EnquiryModel enquiry = EnquiryModel(
       name: _name.text.trim(),
       email: _email.text.trim(),

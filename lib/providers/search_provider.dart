@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/project_model.dart';
 import '../repositories/projects_repository.dart';
 import 'di_providers.dart';
+import 'guest_session_provider.dart';
 import 'projects_provider.dart';
 
 /// Search State: holds the current [ProjectFilter] the user has configured
@@ -10,7 +11,13 @@ class ProjectFilterController extends Notifier<ProjectFilter> {
   @override
   ProjectFilter build() => const ProjectFilter();
 
-  void setQuery(String query) => state = state.copyWith(query: query);
+  void setQuery(String query) {
+    state = state.copyWith(query: query);
+    // Guest-access data plumbing: keep the last search locally regardless
+    // of login state (see guest_session_provider.dart).
+    ref.read(guestActivityProvider.notifier).recordSearchQuery(query);
+  }
+
   void setDistrict(int? districtId) =>
       state = state.copyWith(districtId: districtId, clearDistrict: districtId == null);
   void setDeveloper(int? developerId) =>

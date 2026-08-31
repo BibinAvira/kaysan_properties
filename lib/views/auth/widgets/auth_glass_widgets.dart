@@ -10,13 +10,18 @@ import '../../../widgets/glass/liquid_glass.dart';
 /// splash screen, a floating glass back button, and a scrollable body so
 /// the (long) Register form doesn't overflow on small devices.
 class GlassAuthScaffold extends StatelessWidget {
-  const GlassAuthScaffold({super.key, required this.child, this.onBack});
+  const GlassAuthScaffold({super.key, required this.child, this.onBack, this.actions});
 
   final Widget child;
 
   /// Overrides the default back behavior (pop if possible, otherwise
   /// return to the splash/welcome screen).
   final VoidCallback? onBack;
+
+  /// Optional trailing glass icon buttons (e.g. Profile's logout action),
+  /// rendered at the far end of the same row as the back button. Empty by
+  /// default so Login/Register are unaffected.
+  final List<Widget>? actions;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +65,8 @@ class GlassAuthScaffold extends StatelessWidget {
                               }
                             },
                       ),
+                      const Spacer(),
+                      if (actions != null) ...actions!,
                     ],
                   ),
                 ),

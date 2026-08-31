@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/auth_models.dart';
 import 'di_providers.dart';
+import 'guest_session_provider.dart';
 
 /// Tracks the logged-in user for the whole app: `null` while logged out,
 /// a [UserModel] once logged in. On first read it checks secure storage
@@ -25,6 +26,13 @@ class AuthController extends AsyncNotifier<UserModel?> {
     state = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).login(username: username, password: password),
     );
+    // Guest → registered transition: retire the guest identifier (see
+    // guest_session_provider.dart's doc comment on why there's nothing
+    // else to "merge" — the guest's local activity data is already this
+    // device's data, not namespaced by session ID).
+    if (state.valueOrNull != null) {
+      await ref.read(guestSessionProvider.notifier).clearSessionId();
+    }
   }
 
   Future<void> logout() async {
@@ -35,6 +43,15 @@ class AuthController extends AsyncNotifier<UserModel?> {
   Future<void> updateProfile(Map<String, dynamic> fields) async {
     state = const AsyncValue<UserModel?>.loading();
     state = await AsyncValue.guard(() => ref.read(authRepositoryProvider).updateProfile(fields));
+  }
+
+  /// Permanently deletes the account (App Store 5.1.1(v)). Throws on
+  /// failure — the caller's confirmation dialog is responsible for showing
+  /// that to the user — and leaves [state] untouched so a failed attempt
+  /// doesn't log the person out. On success, state becomes logged-out.
+  Future<void> deleteAccount() async {
+    await ref.read(authRepositoryProvider).deleteAccount();
+    state = const AsyncValue<UserModel?>.data(null);
   }
 }
 

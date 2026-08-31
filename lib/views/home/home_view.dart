@@ -4,6 +4,7 @@ import '../../providers/content_providers.dart';
 import '../../providers/projects_provider.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_sections.dart';
+import 'widgets/signup_nudge_banner.dart';
 
 class HomeView extends ConsumerWidget {
   const HomeView({super.key});
@@ -25,7 +26,9 @@ class HomeView extends ConsumerWidget {
               HomeGreetingHeader(),
               HomeHeadline(),
               HomeSearchBar(),
-              SizedBox(height: 16),
+              SizedBox(height: 12),
+              SignUpNudgeBanner(),
+              SizedBox(height: 4),
               HomeCategoryChips(),
               SizedBox(height: 8),
               TopPropertySection(),

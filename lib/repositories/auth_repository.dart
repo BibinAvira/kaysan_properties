@@ -35,5 +35,13 @@ class AuthRepository {
 
   Future<void> logout() => _service.logout();
 
+  Future<void> deleteAccount() => _service.deleteAccount();
+
+  Future<Set<int>> getSavedPropertyIds() => _service.getSavedPropertyIds();
+
+  Future<void> saveProperty(int propertyId) => _service.saveProperty(propertyId);
+
+  Future<void> unsaveProperty(int propertyId) => _service.unsaveProperty(propertyId);
+
   Future<bool> hasStoredSession() => _service.hasStoredSession();
 }

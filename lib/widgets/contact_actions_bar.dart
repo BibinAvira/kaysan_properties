@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/auth/guest_gate.dart';
 import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/launcher_utils.dart';
@@ -6,7 +8,12 @@ import '../core/utils/launcher_utils.dart';
 /// Sticky bottom bar offering Call / WhatsApp / Email / Share actions —
 /// the standard contact affordance repeated across Property Details and
 /// the Contact screen.
-class ContactActionsBar extends StatelessWidget {
+///
+/// Contacting an agent is an account-dependent action for guests (see the
+/// guest-access spec's "Contact Agent" / "Request Callback"), so each
+/// button routes through [requireAuth] first — already-logged-in users see
+/// no change at all.
+class ContactActionsBar extends ConsumerWidget {
   const ContactActionsBar({
     super.key,
     this.shareTitle,
@@ -19,7 +26,7 @@ class ContactActionsBar extends StatelessWidget {
   final String? whatsappMessage;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SafeArea(
       top: false,
       child: Container(
@@ -39,28 +46,40 @@ class ContactActionsBar extends StatelessWidget {
               icon: Icons.call,
               color: AppColors.primaryNavy,
               label: 'Call',
-              onTap: () => LauncherUtils.call(AppConstants.phoneNumber),
+              onTap: () async {
+                if (await requireAuth(context, ref)) {
+                  LauncherUtils.call(AppConstants.phoneNumber);
+                }
+              },
             ),
             const SizedBox(width: 10),
             _ActionIconButton(
               icon: Icons.chat,
               color: AppColors.whatsapp,
               label: 'WhatsApp',
-              onTap: () => LauncherUtils.whatsapp(
-                whatsappMessage ??
-                    'Hello! I came across $shareTitle on your website and it caught my interest. Could you please share more details?',
-              ),
+              onTap: () async {
+                if (await requireAuth(context, ref)) {
+                  LauncherUtils.whatsapp(
+                    whatsappMessage ??
+                        'Hello! I came across $shareTitle on your website and it caught my interest. Could you please share more details?',
+                  );
+                }
+              },
             ),
             const SizedBox(width: 10),
             _ActionIconButton(
               icon: Icons.email_outlined,
               color: AppColors.gold,
               label: 'Email',
-              onTap: () => LauncherUtils.email(
-                AppConstants.enquiryEmail,
-                subject:
-                    shareTitle != null ? 'Enquiry: $shareTitle' : 'Enquiry',
-              ),
+              onTap: () async {
+                if (await requireAuth(context, ref)) {
+                  LauncherUtils.email(
+                    AppConstants.enquiryEmail,
+                    subject:
+                        shareTitle != null ? 'Enquiry: $shareTitle' : 'Enquiry',
+                  );
+                }
+              },
             ),
             // if (shareTitle != null && shareUrl != null) ...<Widget>[
             //   const SizedBox(width: 10),

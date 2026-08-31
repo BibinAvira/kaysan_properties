@@ -23,8 +23,10 @@ class AuthService {
       : _dio = Dio(
           BaseOptions(
             baseUrl: AppConfig.authBaseUrl,
-            connectTimeout: const Duration(seconds: AppConstants.apiTimeoutSeconds),
-            receiveTimeout: const Duration(seconds: AppConstants.apiTimeoutSeconds),
+            connectTimeout:
+                const Duration(seconds: AppConstants.apiTimeoutSeconds),
+            receiveTimeout:
+                const Duration(seconds: AppConstants.apiTimeoutSeconds),
             headers: <String, String>{'Accept': 'application/json'},
           ),
         ) {
@@ -44,7 +46,8 @@ class AuthService {
     // queue behind the first one.
     _dio.interceptors.add(
       QueuedInterceptorsWrapper(
-        onRequest: (RequestOptions options, RequestInterceptorHandler handler) async {
+        onRequest:
+            (RequestOptions options, RequestInterceptorHandler handler) async {
           if (options.extra['requiresAuth'] == true) {
             final String? token = await _tokenStorage.getAccessToken();
             if (token != null) {
@@ -55,10 +58,13 @@ class AuthService {
         },
         onError: (DioException error, ErrorInterceptorHandler handler) async {
           final RequestOptions requestOptions = error.requestOptions;
-          final bool requiresAuth = requestOptions.extra['requiresAuth'] == true;
+          final bool requiresAuth =
+              requestOptions.extra['requiresAuth'] == true;
           final bool alreadyRetried = requestOptions.extra['retried'] == true;
 
-          if (!requiresAuth || error.response?.statusCode != 401 || alreadyRetried) {
+          if (!requiresAuth ||
+              error.response?.statusCode != 401 ||
+              alreadyRetried) {
             return handler.next(error);
           }
 
@@ -71,11 +77,15 @@ class AuthService {
             await _tokenStorage.saveAccessToken(newAccess);
 
             final RequestOptions retryOptions = requestOptions.copyWith(
-              extra: <String, dynamic>{...requestOptions.extra, 'retried': true},
+              extra: <String, dynamic>{
+                ...requestOptions.extra,
+                'retried': true
+              },
             );
             retryOptions.headers['Authorization'] = 'Bearer $newAccess';
 
-            final Response<dynamic> response = await _dio.fetch<dynamic>(retryOptions);
+            final Response<dynamic> response =
+                await _dio.fetch<dynamic>(retryOptions);
             return handler.resolve(response);
           } catch (_) {
             // Refresh token is expired/invalid too — the session is over.
@@ -105,7 +115,8 @@ class AuthService {
           'password': password,
           if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
           if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
-          if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
+          if (fullName != null && fullName.trim().isNotEmpty)
+            'full_name': fullName.trim(),
         },
       );
       return UserModel.fromJson(response.data as Map<String, dynamic>);
@@ -115,7 +126,8 @@ class AuthService {
   }
 
   /// Logs in, and persists both tokens to secure storage on success.
-  Future<UserModel> login({required String username, required String password}) async {
+  Future<UserModel> login(
+      {required String username, required String password}) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
         '/login/',
@@ -167,11 +179,99 @@ class AuthService {
 
   Future<void> logout() => _tokenStorage.clear();
 
+  /// IDs of the logged-in user's saved properties.
+  ///
+  /// Verified live: GET returns a list of `{id, property_id, saved_at}`
+  /// objects. Parses defensively anyway (also accepts a bare list of ids
+  /// or a DRF-paginated `{results: [...]}` wrapper) since callers still
+  /// treat any failure here as "server sync unavailable" and fall back to
+  /// the local favorites list rather than surfacing an error.
+  Future<Set<int>> getSavedPropertyIds() async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        '/saved-properties/',
+        options: Options(extra: <String, dynamic>{'requiresAuth': true}),
+      );
+      return _parseSavedPropertyIds(response.data);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  Future<void> saveProperty(int propertyId) async {
+    try {
+      await _dio.post<dynamic>(
+        '/saved-properties/',
+        data: <String, dynamic>{'property_id': propertyId.toString()},
+        options: Options(extra: <String, dynamic>{'requiresAuth': true}),
+      );
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  Future<void> unsaveProperty(int propertyId) async {
+    try {
+      await _dio.delete<dynamic>(
+        '/saved-properties/$propertyId/',
+        options: Options(extra: <String, dynamic>{'requiresAuth': true}),
+      );
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  Set<int> _parseSavedPropertyIds(dynamic data) {
+    final Iterable<dynamic> items;
+    if (data is List) {
+      items = data;
+    } else if (data is Map<String, dynamic> && data['results'] is List) {
+      items = data['results'] as List<dynamic>;
+    } else {
+      return <int>{};
+    }
+
+    final Set<int> ids = <int>{};
+    for (final dynamic item in items) {
+      int? id;
+      if (item is int) {
+        id = item;
+      } else if (item is String) {
+        id = int.tryParse(item);
+      } else if (item is Map<String, dynamic>) {
+        final Object? raw =
+            item['property_id'] ?? item['property'] ?? item['id'];
+        id = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+      }
+      if (id != null) ids.add(id);
+    }
+    return ids;
+  }
+
+  /// Permanently deletes the logged-in user's account (App Store guideline
+  /// 5.1.1(v) — actual deletion, not deactivation). Verified live: returns
+  /// `204 No Content` on success, and the same credentials can no longer
+  /// log in afterward.
+  Future<void> deleteAccount() async {
+    try {
+      await _dio.delete<dynamic>(
+        '/delete-account/',
+        options: Options(extra: <String, dynamic>{'requiresAuth': true}),
+      );
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+    // Only clear the local session once the server confirms the account is
+    // actually gone — a failed request should leave the person logged in.
+    await _tokenStorage.clear();
+  }
+
   /// Whether an access token is on-device. This is a cheap presence check,
   /// not a validity check — an expired token still returns true here, and
   /// the first authenticated call that fails will trigger the refresh flow
   /// (or clear storage if the refresh token has also expired).
-  Future<bool> hasStoredSession() async => await _tokenStorage.getAccessToken() != null;
+  Future<bool> hasStoredSession() async =>
+      await _tokenStorage.getAccessToken() != null;
 
   AuthException _mapError(DioException e) {
     final int? status = e.response?.statusCode;
@@ -211,9 +311,11 @@ class AuthService {
         return const AuthException('Request cancelled.');
       case DioExceptionType.badResponse:
         if (status == 401) {
-          return const AuthException('Invalid username or password.', statusCode: 401);
+          return const AuthException('Invalid username or password.',
+              statusCode: 401);
         }
-        return AuthException('Something went wrong. Please try again.', statusCode: status);
+        return AuthException('Something went wrong. Please try again.',
+            statusCode: status);
       case DioExceptionType.badCertificate:
       case DioExceptionType.unknown:
         return const AuthException('An unexpected error occurred.');

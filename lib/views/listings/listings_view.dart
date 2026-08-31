@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kaysan_properties/repositories/projects_repository.dart';
+import '../../core/auth/guest_gate.dart';
 import '../../core/routes/route_names.dart';
 import '../../models/project_model.dart';
 import '../../providers/favorites_provider.dart';
@@ -136,9 +137,13 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
                               return PropertyCard(
                                 project: project,
                                 isFavorite: favIds.contains(project.id),
-                                onFavoriteTap: () => ref
-                                    .read(favoritesProvider.notifier)
-                                    .toggle(project.id),
+                                onFavoriteTap: () async {
+                                  if (await requireAuth(context, ref)) {
+                                    ref
+                                        .read(favoritesProvider.notifier)
+                                        .toggle(project.id);
+                                  }
+                                },
                                 onTap: () => context.push(
                                     RouteNames.propertyDetailsPath(project.id)),
                               );

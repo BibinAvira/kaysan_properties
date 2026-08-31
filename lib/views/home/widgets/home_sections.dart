@@ -2,6 +2,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/auth/guest_gate.dart';
 import '../../../core/routes/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
@@ -147,8 +148,11 @@ class LatestProjectsSection extends ConsumerWidget {
                 child: PropertyCard(
                   project: project,
                   isFavorite: favIds.contains(project.id),
-                  onFavoriteTap: () =>
-                      ref.read(favoritesProvider.notifier).toggle(project.id),
+                  onFavoriteTap: () async {
+                    if (await requireAuth(context, ref)) {
+                      ref.read(favoritesProvider.notifier).toggle(project.id);
+                    }
+                  },
                   onTap: () => context
                       .push(RouteNames.propertyDetailsPath(project.id)),
                 ),
@@ -215,8 +219,11 @@ class TopPropertySection extends ConsumerWidget {
                 child: PropertyCard(
                   project: project,
                   isFavorite: favIds.contains(project.id),
-                  onFavoriteTap: () =>
-                      ref.read(favoritesProvider.notifier).toggle(project.id),
+                  onFavoriteTap: () async {
+                    if (await requireAuth(context, ref)) {
+                      ref.read(favoritesProvider.notifier).toggle(project.id);
+                    }
+                  },
                   onTap: () => context
                       .push(RouteNames.propertyDetailsPath(project.id)),
                 ),

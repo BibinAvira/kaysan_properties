@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/paged_result.dart';
 import '../models/project_model.dart';
 import 'di_providers.dart';
+import 'guest_session_provider.dart';
 
 /// State for the paginated property list: everything loaded so far, plus
 /// enough bookkeeping to drive infinite scroll (whether another page
@@ -99,5 +100,10 @@ final FutureProviderFamily<ProjectModel, int> projectDetailsProvider =
       }
     }
   }
-  return ref.watch(projectsRepositoryProvider).getById(id, cached: cached);
+  final ProjectModel project =
+      await ref.watch(projectsRepositoryProvider).getById(id, cached: cached);
+  // Guest-access data plumbing: keep a local "recently viewed" trail
+  // regardless of login state (see guest_session_provider.dart).
+  ref.read(guestActivityProvider.notifier).recordViewed(id);
+  return project;
 });

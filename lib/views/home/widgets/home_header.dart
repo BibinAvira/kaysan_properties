@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/auth/guest_gate.dart';
 import '../../../core/routes/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/glass/liquid_glass.dart';
@@ -101,7 +102,18 @@ class HomeGreetingHeader extends ConsumerWidget {
           LiquidGlassCircle(
             icon: Icons.notifications_none_rounded,
             iconColor: AppColors.textPrimaryLight,
-            onTap: () {},
+            onTap: () async {
+              // Personalized notifications are an account-dependent
+              // feature for guests. There's no notifications center built
+              // yet even for signed-in users, so this is as far as it
+              // goes today — but the gate is already wired for when there
+              // is one.
+              if (await requireAuth(context, ref) && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("You're all caught up!")),
+                );
+              }
+            },
           ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/auth/guest_gate.dart';
 import '../../core/routes/route_names.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -89,9 +90,13 @@ class _DetailsContent extends ConsumerWidget {
                           child: _GalleryRoundButton(
                             icon: isFavorite ? Icons.favorite : Icons.favorite_border,
                             iconColor: isFavorite ? AppColors.gold : Colors.white,
-                            onTap: () => ref
-                                .read(favoritesProvider.notifier)
-                                .toggle(project.id),
+                            onTap: () async {
+                              if (await requireAuth(context, ref)) {
+                                ref
+                                    .read(favoritesProvider.notifier)
+                                    .toggle(project.id);
+                              }
+                            },
                           ),
                         ),
                       ),
@@ -154,12 +159,12 @@ class _DetailsContent extends ConsumerWidget {
 /// design's price/"Book Now" bar. There's no in-app booking flow backing
 /// this API yet, so the CTA opens WhatsApp pre-filled for this property —
 /// the same channel the rest of the app already uses for enquiries.
-class _PriceEnquireBar extends StatelessWidget {
+class _PriceEnquireBar extends ConsumerWidget {
   const _PriceEnquireBar({required this.project});
   final ProjectModel project;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       color: Theme.of(context).cardColor,
@@ -184,9 +189,13 @@ class _PriceEnquireBar extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.gold),
-            onPressed: () => LauncherUtils.whatsapp(
-              'Hi, I\'m interested in ${project.title.display}.',
-            ),
+            onPressed: () async {
+              if (await requireAuth(context, ref)) {
+                LauncherUtils.whatsapp(
+                  'Hi, I\'m interested in ${project.title.display}.',
+                );
+              }
+            },
             child: const Text('Enquire Now'),
           ),
         ],

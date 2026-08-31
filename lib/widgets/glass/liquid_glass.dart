@@ -3,6 +3,7 @@ library liquid_glass;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:glass_kit/glass_kit.dart';
+import '../../core/theme/app_colors.dart';
 
 /// Shared "Apple Liquid Glass" building blocks.
 ///
@@ -71,13 +72,20 @@ class LiquidGlass extends StatelessWidget {
             padding: padding,
             decoration: BoxDecoration(
               borderRadius: radius,
+              // `gradient` (below) paints over `color` whenever both are
+              // set on the same BoxDecoration, so the actual fill comes
+              // from the gradient's stops — they use [tint] too (not a
+              // hardcoded white) so a non-default tint (e.g. the dark
+              // navy auth prompt sheet) actually takes effect. For the
+              // default white tint every existing caller already uses,
+              // this produces pixel-identical output to before.
               color: tint.withValues(alpha: tintOpacity),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: <Color>[
-                  Colors.white.withValues(alpha: tintOpacity + 0.10),
-                  Colors.white.withValues(alpha: tintOpacity * 0.4),
+                  tint.withValues(alpha: tintOpacity + 0.10),
+                  tint.withValues(alpha: tintOpacity * 0.4),
                 ],
               ),
               border: Border.all(
@@ -211,6 +219,7 @@ class LiquidGlassButton extends StatefulWidget {
     this.icon,
     this.filled = true,
     this.height = 58,
+    this.accentColor,
   });
 
   final String label;
@@ -219,6 +228,11 @@ class LiquidGlassButton extends StatefulWidget {
   final IconData? icon;
   final bool filled;
   final double height;
+
+  /// Overrides the label/icon/spinner color (default white) — used for a
+  /// destructive action (e.g. "Delete Account") so it reads as dangerous
+  /// while keeping the exact same glass mechanics as every other button.
+  final Color? accentColor;
 
   @override
   State<LiquidGlassButton> createState() => _LiquidGlassButtonState();
@@ -271,22 +285,23 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
             ),
             child: Center(
               child: widget.loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: widget.accentColor ?? Colors.white),
                     )
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         if (widget.icon != null) ...<Widget>[
-                          Icon(widget.icon, color: Colors.white, size: 18),
+                          Icon(widget.icon, color: widget.accentColor ?? Colors.white, size: 18),
                           const SizedBox(width: 8),
                         ],
                         Text(
                           widget.label,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: widget.accentColor ?? Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.3,
@@ -298,6 +313,87 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The app's single "dark premium glass" card recipe — established in the
+/// guest sign-in prompt sheet and reused verbatim everywhere a surface
+/// needs to read clearly regardless of what's behind it: dialogs, Profile
+/// panels, "sign in to unlock" cards. Keeping this as one widget (rather
+/// than each screen re-specifying [LiquidGlass]'s tint/blur/opacity) is
+/// what keeps them all feeling like one design language instead of each
+/// screen inventing its own dark card.
+class GlassDarkCard extends StatelessWidget {
+  const GlassDarkCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(24),
+    this.borderRadius = 28,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return LiquidGlass(
+      borderRadius: borderRadius,
+      blur: 30,
+      tint: AppColors.primaryNavy,
+      tintOpacity: 0.88,
+      borderOpacity: 0.16,
+      padding: padding,
+      child: child,
+    );
+  }
+}
+
+/// The circular icon badge that sits atop every [GlassDarkCard] moment —
+/// a soft brand-tinted circle, with an optional glow for the "premium
+/// futuristic" empty/invitation states. Established in the guest sign-in
+/// prompt sheet.
+class GlassIconBadge extends StatelessWidget {
+  const GlassIconBadge({
+    super.key,
+    required this.icon,
+    this.color = AppColors.goldLight,
+    this.size = 56,
+    this.iconSize = 26,
+    this.glow = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+  final double iconSize;
+
+  /// A soft outward glow behind the badge — used for empty-state
+  /// "invitation" cards (Home's sign-up nudge, Favorites' sign-in prompt)
+  /// rather than for compact inline dialogs, where it'd be too busy.
+  final bool glow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+        boxShadow: glow
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 28,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: Icon(icon, color: color, size: iconSize),
     );
   }
 }

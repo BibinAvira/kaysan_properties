@@ -29,9 +29,10 @@ class FilterSheet extends ConsumerWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (BuildContext context, ScrollController scrollController) {
+        final double bottomInset = MediaQuery.of(context).padding.bottom;
         return ListView(
           controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
           children: <Widget>[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

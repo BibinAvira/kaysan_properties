@@ -23,4 +23,15 @@ class FavoritesRepository {
     await prefs.setStringList(_key, current.map((int e) => e.toString()).toList());
     return current;
   }
+
+  /// Unions [ids] into the local set without touching entries already
+  /// there — used to fold in a logged-in user's server-side saved
+  /// properties on login without clobbering anything favorited locally.
+  Future<Set<int>> addAll(Set<int> ids) async {
+    if (ids.isEmpty) return getFavoriteIds();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final Set<int> merged = <int>{...await getFavoriteIds(), ...ids};
+    await prefs.setStringList(_key, merged.map((int e) => e.toString()).toList());
+    return merged;
+  }
 }

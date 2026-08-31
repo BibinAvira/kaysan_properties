@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/routes/route_names.dart';
@@ -35,18 +36,21 @@ class MoreView extends ConsumerWidget {
             ),
             error: (Object e, StackTrace st) => ListTile(
               leading: const Icon(Icons.person_outline),
-              title: const Text('Log In / Sign Up'),
+              title: const Text('Guest User'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(RouteNames.login),
+              onTap: () => context.push(RouteNames.profile),
             ),
             data: (UserModel? user) {
               if (user == null) {
+                // Routes through the Profile screen (not straight to
+                // Login) so guests see the dedicated "Guest User / sign in
+                // to unlock personalized features" invitation there.
                 return ListTile(
                   leading: const Icon(Icons.person_outline),
-                  title: const Text('Log In / Sign Up'),
-                  subtitle: const Text('Save favorites and manage your enquiries'),
+                  title: const Text('Guest User'),
+                  subtitle: const Text('Sign in to unlock personalized features'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(RouteNames.login),
+                  onTap: () => context.push(RouteNames.profile),
                 );
               }
               return ListTile(
@@ -131,13 +135,15 @@ class MoreView extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              _socialButton(Icons.facebook,
+              _socialButton(FontAwesomeIcons.facebook,
                   () => LauncherUtils.openUrl(AppConstants.facebookUrl)),
-              _socialButton(Icons.camera_alt_outlined,
+              _socialButton(FontAwesomeIcons.instagram,
                   () => LauncherUtils.openUrl(AppConstants.instagramUrl)),
-              _socialButton(Icons.business_center_outlined,
+              _socialButton(FontAwesomeIcons.linkedin,
                   () => LauncherUtils.openUrl(AppConstants.linkedinUrl)),
-              _socialButton(Icons.play_circle_outline,
+              _socialButton(FontAwesomeIcons.tiktok,
+                  () => LauncherUtils.openUrl(AppConstants.tiktokUrl)),
+              _socialButton(FontAwesomeIcons.youtube,
                   () => LauncherUtils.openUrl(AppConstants.youtubeUrl)),
             ],
           ),
@@ -148,6 +154,6 @@ class MoreView extends ConsumerWidget {
   }
 
   Widget _socialButton(IconData icon, VoidCallback onTap) {
-    return IconButton(icon: Icon(icon), onPressed: onTap);
+    return IconButton(icon: FaIcon(icon, size: 20), onPressed: onTap);
   }
 }

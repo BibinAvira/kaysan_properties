@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 
-/// Privacy Policy screen. Copy is a standard real-estate-brokerage privacy
-/// notice placeholder — replace with Kaysan Properties' actual legal text
-/// before shipping to production.
+/// Privacy Policy screen.
+///
+/// NOTE: this copy describes what the app actually does (account fields
+/// collected, no location/tracking, self-serve in-app deletion) but it is
+/// NOT a substitute for legal review — have Kaysan Properties' counsel sign
+/// off on this text before the next App Store submission. Apple reads this
+/// screen during review and rejects policies that don't match real app
+/// behavior (Guideline 5.1.1/5.1.2), so keep it in sync with the code —
+/// e.g. if a tracking/analytics SDK or new permission is ever added, this
+/// text needs to say so.
 class PrivacyPolicyView extends StatelessWidget {
   const PrivacyPolicyView({super.key});
 
@@ -14,31 +21,43 @@ class PrivacyPolicyView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: <Widget>[
-          Text('Last updated: July 2026', style: Theme.of(context).textTheme.labelSmall),
+          Text('Last updated: August 2026', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 16),
           _Section(
             title: 'Information We Collect',
-            body: 'We collect the information you provide directly to us, such as your name, '
-                'email address, and phone number when you submit an enquiry or register '
-                'interest in a property, as well as usage data collected automatically '
-                'through your use of the app.',
+            body: 'Browsing properties, areas, and blog content does not require an account and '
+                'we do not collect any personal information for it. If you create an account, '
+                'we collect your username, password, and any of full name, email address, or '
+                'phone number you choose to add to your profile. If you submit a property '
+                'enquiry or contact us, we collect the name, email, phone number, and message '
+                'you provide. We do not access your device location, contacts, or photos.',
           ),
           _Section(
             title: 'How We Use Your Information',
-            body: 'We use the information we collect to respond to your enquiries, provide '
-                'you with property recommendations, improve our services, and communicate '
-                'with you about listings that may be of interest.',
+            body: 'We use this information to operate your account, respond to enquiries, show '
+                'you your saved favorites, and communicate with you about listings you\'ve '
+                'asked about. We do not use your information for advertising, and we do not '
+                'use analytics or tracking SDKs that identify you individually.',
           ),
           _Section(
             title: 'Sharing of Information',
-            body: 'We do not sell your personal information. We may share limited details with '
-                'developers or partner agents solely to process a specific enquiry you have '
-                'submitted, and only with your consent.',
+            body: 'We do not sell your personal information. We may share the details of a '
+                'specific enquiry with the relevant developer or partner agent solely to '
+                'respond to that enquiry.',
           ),
           _Section(
-            title: 'Your Rights',
-            body: 'You may request access to, correction of, or deletion of your personal data '
-                'at any time by contacting us at ${AppConstants.enquiryEmail}.',
+            title: 'Data Retention',
+            body: 'We retain account and enquiry data for as long as your account is active or '
+                'as needed to respond to your enquiries, and delete it when you delete your '
+                'account or request removal.',
+          ),
+          _Section(
+            title: 'Your Rights — Deleting Your Account',
+            body: 'You can permanently delete your account and its associated data at any time '
+                'from the app: go to More > your account > Delete Account, confirm, and it '
+                'takes effect immediately — no need to contact support. You can also request '
+                'access to, correction of, or deletion of your data by emailing '
+                '${AppConstants.enquiryEmail}.',
           ),
           _Section(
             title: 'Contact Us',

@@ -9,14 +9,15 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/glass/liquid_glass.dart';
 
 /// Welcome / splash screen — a full-bleed hero photo with a dark gradient
-/// scrim and a single "Get Started" glass pill, same as before.
+/// scrim and the guest-access decision: "Explore Properties" (browse as a
+/// guest, no account needed) or "Login / Create Account" for people who
+/// already have — or want to start — an account.
 ///
 /// While the screen is up, [AuthController] silently checks secure storage
 /// for a saved session. If one is found and still valid, the person is
-/// already signed in ("keep me logged in") and tapping Get Started — or
-/// even just waiting — takes them straight to Home. If there's no session,
-/// Get Started takes them to the Log In screen instead (which has a
-/// "Sign up" link for new accounts).
+/// already signed in ("keep me logged in") and this screen is skipped
+/// entirely — they land straight on Home once the minimum splash time has
+/// passed. Everyone else sees the two-button decision below.
 class SplashView extends ConsumerStatefulWidget {
   const SplashView({super.key});
 
@@ -66,17 +67,14 @@ class _SplashViewState extends ConsumerState<SplashView>
     super.dispose();
   }
 
-  /// Where "Get Started" (or the auto-redirect for an already-logged-in
-  /// person) should go: Home if there's a valid saved session, otherwise
-  /// Log In (which itself links to Sign Up).
-  void _continue() {
-    final bool loggedIn = ref.read(authControllerProvider).valueOrNull != null;
-    if (loggedIn) {
-      context.go(RouteNames.home);
-    } else {
-      context.go(RouteNames.login);
-    }
-  }
+  /// "Explore Properties" always opens Home as a guest — browsing
+  /// properties never requires an account (App Store guideline 5.1.1(v)).
+  /// Signing in/up is still one tap away — either right here or later from
+  /// the More tab — whenever someone wants to save favorites, contact an
+  /// agent, or manage a profile.
+  void _exploreAsGuest() => context.go(RouteNames.home);
+
+  void _loginOrCreateAccount() => context.push(RouteNames.login);
 
   @override
   Widget build(BuildContext context) {
@@ -107,6 +105,23 @@ class _SplashViewState extends ConsumerState<SplashView>
             fit: BoxFit.cover,
           ),
 
+          // Bottom scrim so the two-button decision block always reads
+          // clearly against the photo, however much of it the buttons
+          // end up covering — a soft fade rather than a hard clip.
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0x00000000), Color(0xB3000000)],
+                ),
+              ),
+              child: SizedBox(width: double.infinity, height: 260),
+            ),
+          ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -125,10 +140,25 @@ class _SplashViewState extends ConsumerState<SplashView>
                         child: showChecking
                             ? const _CheckingSessionIndicator(
                                 key: ValueKey('checking'))
-                            : LiquidGlassButton(
-                                key: const ValueKey('get-started'),
-                                label: 'Get Started',
-                                onTap: _continue,
+                            : Column(
+                                key: const ValueKey('decision'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  LiquidGlassButton(
+                                    label: 'Explore Properties',
+                                    icon: Icons.explore_outlined,
+                                    height: 54,
+                                    onTap: _exploreAsGuest,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  LiquidGlassButton(
+                                    label: 'Login / Create Account',
+                                    icon: Icons.person_outline,
+                                    filled: false,
+                                    height: 54,
+                                    onTap: _loginOrCreateAccount,
+                                  ),
+                                ],
                               ),
                       ),
                     ),

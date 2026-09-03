@@ -65,10 +65,14 @@ final Provider<bool> isLoggedInProvider = Provider<bool>((Ref ref) {
 });
 
 /// Tracks the async lifecycle of the Register form specifically — kept
-/// separate from [AuthController] because a successful registration does
-/// NOT log the user in (the API returns no tokens from `/register/`); the
-/// register screen just needs its own idle -> loading -> data/error cycle,
-/// mirroring `EnquiryController`.
+/// separate from [AuthController] because the API returns no tokens from
+/// `/register/`, so a successful registration alone doesn't establish a
+/// session. To avoid handing the user a blank Login screen right after
+/// they've just typed a password (the exact defect Apple's reviewer hit —
+/// see App Store rejection for build 1.0.0(7), Guideline 2.1(a)), [submit]
+/// immediately logs in with the same credentials via [AuthController] once
+/// registration succeeds. This controller's own state just reflects whether
+/// the register call itself succeeded, mirroring `EnquiryController`.
 class RegisterController extends AsyncNotifier<UserModel?> {
   @override
   Future<UserModel?> build() async => null;
@@ -81,7 +85,7 @@ class RegisterController extends AsyncNotifier<UserModel?> {
     String? fullName,
   }) async {
     state = const AsyncValue<UserModel?>.loading();
-    state = await AsyncValue.guard(
+    final AsyncValue<UserModel?> result = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).register(
             username: username,
             password: password,
@@ -90,6 +94,20 @@ class RegisterController extends AsyncNotifier<UserModel?> {
             fullName: fullName,
           ),
     );
+
+    if (result.hasValue && result.value != null) {
+      // Registration succeeded on the backend; auto-login with the same
+      // credentials so the user lands in the app instead of being bounced
+      // to a Login form they'd have to fill in again. `login()` guards its
+      // own errors, so a hiccup here just leaves AuthController logged out
+      // — the view falls back to the manual Login screen in that case.
+      await ref.read(authControllerProvider.notifier).login(
+            username: username,
+            password: password,
+          );
+    }
+
+    state = result;
   }
 
   void reset() => state = const AsyncValue<UserModel?>.data(null);

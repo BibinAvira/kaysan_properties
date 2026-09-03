@@ -76,18 +76,31 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
           data: (UserModel? user) {
             if (user == null) return;
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Account created! Log in to continue.'),
-              ),
-            );
-
             ref.read(registerControllerProvider.notifier).reset();
 
-            context.pushReplacement(
-              RouteNames.login,
-              extra: _username.text.trim(),
-            );
+            // submit() already attempted an auto-login with the same
+            // credentials — if that succeeded, AuthController now holds the
+            // logged-in user and we can go straight into the app instead of
+            // bouncing back to a Login form (see auth_provider.dart doc).
+            final bool autoLoggedIn =
+                ref.read(authControllerProvider).value != null;
+
+            if (autoLoggedIn) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Account created!')),
+              );
+              context.go(RouteNames.home);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Account created! Log in to continue.'),
+                ),
+              );
+              context.pushReplacement(
+                RouteNames.login,
+                extra: _username.text.trim(),
+              );
+            }
           },
           error: (Object e, StackTrace st) {
             final String message = e is AuthException

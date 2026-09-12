@@ -145,7 +145,7 @@ class _DetailsContent extends ConsumerWidget {
               shareTitle: project.title.display,
               shareUrl: project.addressText.isNotEmpty
                   ? project.addressText
-                  : 'https://microservice.x-opp.com/property/${project.id}',
+                  : 'https://www.x-opperp.com/property/${project.id}',
               whatsappMessage: 'Hi, I\'m interested in ${project.title.display}.',
             ),
           ],
@@ -399,7 +399,9 @@ class _KeyFactsRow extends StatelessWidget {
               'Handover',
               handover != null
                   ? Formatters.handoverLabel(handover)
-                  : project.propertyStatusLabel),
+                  : (project.deliveryDateLabel.isNotEmpty
+                      ? project.deliveryDateLabel
+                      : project.propertyStatusLabel)),
           _divider(),
           _fact(context, 'Units', unitsLabel),
         ],

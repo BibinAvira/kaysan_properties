@@ -21,7 +21,10 @@ class ApiService {
                 const Duration(seconds: AppConstants.apiTimeoutSeconds),
             receiveTimeout:
                 const Duration(seconds: AppConstants.apiTimeoutSeconds),
-            headers: <String, String>{'Accept': 'application/json'},
+            headers: <String, String>{
+              'Accept': 'application/json',
+              'X-API-Key': AppConfig.xoppApiKey,
+            },
           ),
         ) {
     if (kDebugMode) {

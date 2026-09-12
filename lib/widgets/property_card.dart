@@ -109,8 +109,15 @@ class PropertyCard extends StatelessWidget {
                           ),
                         ),
                         if (project.subunitCount.display.isNotEmpty)
-                          Text(project.subunitCount.display,
-                              style: theme.textTheme.labelSmall),
+                          Flexible(
+                            child: Text(
+                              project.subunitCount.display,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: theme.textTheme.labelSmall,
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -125,8 +132,9 @@ class PropertyCard extends StatelessWidget {
 
   String _handoverLabel(ProjectModel project) {
     final DateTime? handover = project.handoverDate;
-    if (handover == null) return project.propertyStatusLabel;
-    return 'Handover: ${Formatters.handoverLabel(handover)}';
+    if (handover != null) return 'Handover: ${Formatters.handoverLabel(handover)}';
+    if (project.deliveryDateLabel.isNotEmpty) return 'Handover: ${project.deliveryDateLabel}';
+    return project.propertyStatusLabel;
   }
 }
 

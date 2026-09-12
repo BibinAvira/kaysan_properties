@@ -1,15 +1,17 @@
 import '../models/paged_result.dart';
 import '../models/project_model.dart';
-import 'api_exception.dart';
 import 'api_service.dart';
 
-/// Data source for the live property list/detail endpoints:
-///   GET /properties/       — paginated list (summary fields only)
-///   GET /property/{id}/    — single record (summary + detail fields)
+/// Data source for the live X-OPP Partner API property endpoints:
+///   GET /properties/            — paginated list (summary fields only)
+///   GET /properties/{id}/       — single record (summary + detail fields)
+///   GET /properties/{id}/units/ — a project's individually listed units
 ///
-/// Both endpoints wrap their payload in `{status, message, data, errors}`
-/// (list) or `{status, message, data, error}` (detail — singular key, an
-/// API inconsistency handled defensively here rather than assumed away).
+/// Unlike the previous backend, these responses are flat — no
+/// `{status, message, data}` wrapper — so the raw envelope is handed
+/// straight to [PagedResult.fromJson] / [ProjectModel.fromDetailJson].
+/// Authentication (the `X-API-Key` header) and error mapping (401/404/429
+/// → [ApiException]) are handled by [ApiService].
 class ProjectsService {
   ProjectsService(this._api);
 
@@ -20,31 +22,35 @@ class ProjectsService {
       '/properties/',
       queryParameters: <String, dynamic>{'page': page},
     );
-    final Map<String, dynamic> data = _unwrap(envelope);
-    return PagedResult<ProjectModel>.fromJson(data, ProjectModel.fromListJson);
+    return PagedResult<ProjectModel>.fromJson(envelope, ProjectModel.fromListJson);
   }
 
-  /// Follows a full `next_page_url` returned by a previous page — used by
+  /// Follows a full `next` URL returned by a previous page — used by
   /// pagination controllers instead of reconstructing `?page=N` by hand,
   /// since the server-given URL is guaranteed correct.
   Future<PagedResult<ProjectModel>> fetchProjectsByUrl(String url) async {
     final Map<String, dynamic> envelope = await _api.getAbsolute(url);
-    final Map<String, dynamic> data = _unwrap(envelope);
-    return PagedResult<ProjectModel>.fromJson(data, ProjectModel.fromListJson);
+    return PagedResult<ProjectModel>.fromJson(envelope, ProjectModel.fromListJson);
   }
 
   Future<ProjectModel> fetchProjectById(int id) async {
-    final Map<String, dynamic> envelope = await _api.get('/property/$id/');
-    final Map<String, dynamic> data = _unwrap(envelope);
-    return ProjectModel.fromDetailJson(data);
+    final Map<String, dynamic> envelope = await _api.get('/properties/$id/');
+    return ProjectModel.fromDetailJson(envelope);
   }
 
-  Map<String, dynamic> _unwrap(Map<String, dynamic> envelope) {
-    final bool ok = envelope['status'] as bool? ?? true;
-    if (!ok) {
-      final String message = envelope['message'] as String? ?? 'The request was not successful.';
-      throw ApiException(ApiExceptionType.server, message);
-    }
-    return envelope['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+  /// A project's individually listed units (unit number, price, area,
+  /// status, …). Fetched separately from the detail record since it's its
+  /// own paginated endpoint; [pageSize] defaults to the API's max (100) so
+  /// one call covers the vast majority of projects.
+  Future<PagedResult<PropertyUnitModel>> fetchPropertyUnits(
+    int id, {
+    int page = 1,
+    int pageSize = 100,
+  }) async {
+    final Map<String, dynamic> envelope = await _api.get(
+      '/properties/$id/units/',
+      queryParameters: <String, dynamic>{'page': page, 'page_size': pageSize},
+    );
+    return PagedResult<PropertyUnitModel>.fromJson(envelope, PropertyUnitModel.fromJson);
   }
 }

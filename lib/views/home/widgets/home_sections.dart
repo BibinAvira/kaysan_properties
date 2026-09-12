@@ -202,6 +202,11 @@ class TopPropertySection extends ConsumerWidget {
                 : state.items
                     .where((ProjectModel p) => p.propertyStatusCode == statusFilter)
                     .toList();
+            // Off-Plan: soonest handover first. Ready (and "All Projects"):
+            // left in the API's own newest-added-first order.
+            if (statusFilter == 2) {
+              matches.sort(ProjectModel.compareHandoverSoonest);
+            }
             if (matches.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

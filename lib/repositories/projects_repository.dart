@@ -1,5 +1,6 @@
 import '../models/paged_result.dart';
 import '../models/project_model.dart';
+import '../services/api_exception.dart';
 import '../services/projects_service.dart';
 
 /// Search/filter criteria applied over the project pages loaded so far.
@@ -65,10 +66,19 @@ class ProjectsRepository {
 
   /// Fetches full detail for [id]. If [cached] (a summary from the already
   /// loaded list) is supplied, the two are merged so nothing already known
-  /// — like the fuller developer profile from the list response — is lost.
+  /// is lost. Also fetches the project's individual units from their own
+  /// endpoint and attaches them — a failure there (e.g. an inactive
+  /// project with no unit-level data) doesn't fail the whole detail load,
+  /// since units are supplementary to the rest of the page.
   Future<ProjectModel> getById(int id, {ProjectModel? cached}) async {
     final ProjectModel detail = await _service.fetchProjectById(id);
-    return cached != null ? cached.mergeDetail(detail) : detail;
+    final ProjectModel merged = cached != null ? cached.mergeDetail(detail) : detail;
+    try {
+      final PagedResult<PropertyUnitModel> units = await _service.fetchPropertyUnits(id);
+      return merged.withPropertyUnits(units.items);
+    } on ApiException {
+      return merged;
+    }
   }
 
   /// Applies search text, facet filters and sort order over an
@@ -106,7 +116,7 @@ class ProjectsRepository {
         list.sort((ProjectModel a, ProjectModel b) => b.lowPrice.compareTo(a.lowPrice));
         break;
       case ProjectSort.handoverSoonest:
-        list.sort((ProjectModel a, ProjectModel b) => a.deliveryDate.compareTo(b.deliveryDate));
+        list.sort(ProjectModel.compareHandoverSoonest);
         break;
       case ProjectSort.recommended:
         break;

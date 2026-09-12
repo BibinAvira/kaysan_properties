@@ -133,20 +133,15 @@ class SubunitCount {
   String get display => label.display.isNotEmpty ? '$value ${label.display}' : value;
 }
 
-/// One photo attached to a property. `type` is an unlabeled API enum;
-/// empirically `1` is the general gallery/exterior photo bucket, so that's
-/// what's used for the main image carousel — other types are kept around
-/// for future use (e.g. floor-plan or amenity photo sets) rather than
-/// discarded.
+/// One photo attached to a property. `type` was an unlabeled enum from the
+/// previous backend (kept so [ProjectModel.galleryImages]'s `type == 1`
+/// filter still works); the X-OPP API's flat `images` array has no such
+/// distinction, so every image built from it is tagged `1`.
 class PropertyImageModel {
   const PropertyImageModel({required this.url, required this.type});
 
   final String url;
   final int type;
-
-  factory PropertyImageModel.fromJson(Map<String, dynamic> json) {
-    return PropertyImageModel(url: json['image'] as String? ?? '', type: json['type'] as int? ?? 1);
-  }
 }
 
 /// A building facility/amenity (`{id, name}` only — no icon hint from the
@@ -164,7 +159,11 @@ class FacilityModel {
 
 /// A summarized unit typology within the project, e.g. "Apartment / 2
 /// bedrooms starting at AED 4.7M" — this is the closest equivalent to a
-/// traditional "floor plan" card, sourced from `grouped_apartments`.
+/// traditional "floor plan" card. The X-OPP API has no per-type price/area
+/// breakdown to build this from (only an overall bedroom/price/area range
+/// per project), so [ProjectModel.groupedApartments] is currently always
+/// empty; this class and its `fromJson` are kept in case a future catalog
+/// or endpoint restores that data.
 class GroupedApartmentModel {
   const GroupedApartmentModel({
     required this.id,
@@ -199,7 +198,7 @@ class GroupedApartmentModel {
 }
 
 /// A single, individually listed unit for sale within the project, sourced
-/// from `property_units`.
+/// from the `/properties/{id}/units/` endpoint.
 class PropertyUnitModel {
   const PropertyUnitModel({
     required this.id,
@@ -222,10 +221,12 @@ class PropertyUnitModel {
   factory PropertyUnitModel.fromJson(Map<String, dynamic> json) {
     return PropertyUnitModel(
       id: json['id'] as int? ?? 0,
-      aptNo: json['apt_no'] as String? ?? '—',
+      aptNo: json['unit_no'] as String? ?? '—',
       area: (json['area'] as num?)?.toDouble(),
       price: (json['price'] as num?)?.toDouble(),
-      floorNo: json['floor_no'] as int?,
+      // The API's floor is free text (e.g. "G", "12") rather than a
+      // guaranteed integer, so a non-numeric floor just leaves this null.
+      floorNo: int.tryParse('${json['floor_no'] ?? ''}'),
       floorPlanImage: json['floor_plan_image'] as String?,
       status: json['status'] as String? ?? '',
     );
@@ -249,6 +250,14 @@ class PaymentPlanValueModel {
 }
 
 /// A payment plan option, e.g. "60/40", with its milestone breakdown.
+///
+/// The X-OPP API gives each plan as `{name, down_payment_pct,
+/// during_construction_pct, on_handover_pct, post_delivery_payment}` rather
+/// than free-text milestone lines, so [ProjectModel.fromDetailJson]
+/// synthesizes [values] from those percentages and uses
+/// [post_delivery_payment] to fill [description] with a "Post-Handover"
+/// tag — everything else about this class (and the card that renders it)
+/// is unchanged.
 class PaymentPlanModel {
   const PaymentPlanModel({required this.name, required this.description, required this.values});
 
@@ -268,11 +277,11 @@ class PaymentPlanModel {
 }
 
 /// A property/project. The list endpoint (`/properties/`) populates the
-/// "summary" fields; the detail endpoint (`/property/{id}/`) additionally
+/// "summary" fields; the detail endpoint (`/properties/{id}/`) additionally
 /// populates the "detail" fields (nullable/empty by default). Use
 /// [mergeDetail] to combine a cached list-summary with a freshly fetched
-/// detail record so nothing already known (e.g. the richer developer
-/// profile) gets lost.
+/// detail record so nothing already known gets lost, and [withPropertyUnits]
+/// to attach the project's units once fetched from their own endpoint.
 class ProjectModel {
   const ProjectModel({
     required this.id,
@@ -281,6 +290,7 @@ class ProjectModel {
     required this.address,
     required this.addressText,
     required this.deliveryDate,
+    required this.deliveryDateLabel,
     required this.minArea,
     required this.lowPrice,
     required this.propertyTypeCode,
@@ -292,17 +302,17 @@ class ProjectModel {
     required this.subunitCount,
     this.updatedAt,
     this.salesStatusLabel,
-    // Detail-only fields — empty/null when this came from the list endpoint.
     this.description,
-    this.downPayment,
     this.completionRate,
+    this.rentalGuarantee,
+    this.rentalGuaranteeValue,
+    this.propertyImages = const <PropertyImageModel>[],
+    // Detail-only fields — empty/null when this came from the list endpoint.
+    this.downPayment,
     this.residentialUnits,
     this.commercialUnits,
     this.paymentMinimumDownPayment,
     this.postDelivery,
-    this.rentalGuarantee,
-    this.rentalGuaranteeValue,
-    this.propertyImages = const <PropertyImageModel>[],
     this.facilities = const <FacilityModel>[],
     this.groupedApartments = const <GroupedApartmentModel>[],
     this.paymentPlans = const <PaymentPlanModel>[],
@@ -313,9 +323,10 @@ class ProjectModel {
   final int id;
   final LocalizedText title;
   final String cover;
-  final String address; // raw "lat,lng" string
-  final String addressText; // Google Maps share link
-  final int deliveryDate; // YYYYMM, e.g. 202601
+  final String address; // "lat,lng" built from the API's latitude/longitude
+  final String addressText; // no longer supplied by the API; always ''
+  final int deliveryDate; // YYYYMM best-effort parsed from deliveryDateLabel
+  final String deliveryDateLabel; // API's free-text delivery_date, e.g. "Q4 2027"
   final double minArea;
   final double lowPrice;
   final int propertyTypeCode;
@@ -327,21 +338,21 @@ class ProjectModel {
   final SubunitCount subunitCount;
   final DateTime? updatedAt;
 
-  /// Only reliably known from the detail endpoint, which returns
-  /// `sales_status` as `{id, name}` instead of a bare code.
+  /// Populated directly from the API's `sales_status_name` string.
   final LocalizedText? salesStatusLabel;
 
-  // Detail-only fields
   final LocalizedText? description;
-  final double? downPayment;
   final int? completionRate;
+  final bool? rentalGuarantee;
+  final double? rentalGuaranteeValue;
+  final List<PropertyImageModel> propertyImages;
+
+  // Detail-only fields
+  final double? downPayment;
   final int? residentialUnits;
   final int? commercialUnits;
   final int? paymentMinimumDownPayment;
   final bool? postDelivery;
-  final bool? rentalGuarantee;
-  final double? rentalGuaranteeValue;
-  final List<PropertyImageModel> propertyImages;
   final List<FacilityModel> facilities;
   final List<GroupedApartmentModel> groupedApartments;
   final List<PaymentPlanModel> paymentPlans;
@@ -358,9 +369,11 @@ class ProjectModel {
     return (double.tryParse(parts[0].trim()), double.tryParse(parts[1].trim()));
   }
 
-  /// Converts the API's `YYYYMM` integer into a real [DateTime] (day fixed
-  /// to the 1st, since no day is given). Returns null for unparsable/zero
-  /// values.
+  /// Converts the best-effort-parsed `YYYYMM` [deliveryDate] into a real
+  /// [DateTime] (day fixed to the 1st, since no day is given). Returns null
+  /// for unparsable/zero values — callers should fall back to
+  /// [deliveryDateLabel] (the API's original free-text string) rather than
+  /// [propertyStatusLabel] where possible, since it carries more info.
   DateTime? get handoverDate {
     if (deliveryDate <= 0) return null;
     final int year = deliveryDate ~/ 100;
@@ -369,10 +382,9 @@ class ProjectModel {
     return DateTime(year, month, 1);
   }
 
-  /// "Ready" / "Off-Plan" — inferred from observed data (property_status
-  /// 1 consistently corresponds to already-delivered projects, 2 to
-  /// projects still under construction regardless of nominal delivery
-  /// date). Falls back to a generic label for any other code.
+  /// "Ready" / "Off-Plan" — derived from the API's `property_status_name`
+  /// ("Ready" / "Off Plan"). Falls back to a generic label if that string
+  /// is missing or unrecognized.
   String get propertyStatusLabel {
     switch (propertyStatusCode) {
       case 1:
@@ -384,15 +396,14 @@ class ProjectModel {
     }
   }
 
-  /// Best-effort sales-status label. Only code `1` ("Available") is
-  /// confirmed directly from the API (the detail endpoint's `sales_status`
-  /// object); other codes fall back to a non-committal "For Sale" rather
-  /// than guessing a specific status that could be wrong.
+  /// Sales-status label, straight from the API's `sales_status_name`
+  /// (e.g. "On Sale", "Sold Out"), falling back to a non-committal default
+  /// only if that string was missing.
   String get salesStatusDisplay {
     if (salesStatusLabel != null && salesStatusLabel!.display.isNotEmpty) {
       return salesStatusLabel!.display;
     }
-    return salesStatusCode == 1 ? 'Available' : 'For Sale';
+    return 'For Sale';
   }
 
   /// Main gallery images (`type == 1`), falling back to just [cover] if
@@ -405,81 +416,176 @@ class ProjectModel {
     return gallery.isNotEmpty ? gallery : (cover.isNotEmpty ? <String>[cover] : <String>[]);
   }
 
+  /// Orders by [deliveryDate] ascending (soonest handover first), with
+  /// projects that have no parseable handover date (0 — typically an
+  /// already-`Ready` property, or an Off-Plan one with an unrecognized
+  /// date format) pushed to the end rather than sorting first, which a
+  /// naive ascending-int compare would otherwise do since 0 is the
+  /// smallest possible value.
+  static int compareHandoverSoonest(ProjectModel a, ProjectModel b) {
+    final int keyA = a.deliveryDate == 0 ? 999999 : a.deliveryDate;
+    final int keyB = b.deliveryDate == 0 ? 999999 : b.deliveryDate;
+    return keyA.compareTo(keyB);
+  }
+
+  /// Maps the API's free-text `property_status_name` onto the 1/Ready,
+  /// 2/Off-Plan codes the rest of the app already filters/displays by.
+  static int _statusCodeFromName(String? name) {
+    final String n = (name ?? '').toLowerCase();
+    if (n.contains('ready')) return 1;
+    if (n.contains('off')) return 2;
+    return 0;
+  }
+
+  /// Best-effort turns a free-text delivery date into a sortable `YYYYMM`
+  /// int, so [ProjectSort.handoverSoonest] keeps working. In practice the
+  /// live catalog sends a plain `"YYYYMM"` code (e.g. `"202609"`) far more
+  /// often than the doc's prose example ("Q4 2027"), so that exact form is
+  /// checked first — matching the quarter/year regexes against a 6-digit
+  /// code would otherwise misread its first 4 digits as a year and default
+  /// the month to January. Returns 0 (unsortable) for anything else, e.g.
+  /// an empty string on a ready property.
+  static int _parseDeliveryDate(String? label) {
+    if (label == null || label.isEmpty) return 0;
+    final RegExpMatch? yyyymm = RegExp(r'^(\d{4})(\d{2})$').firstMatch(label);
+    if (yyyymm != null) {
+      final int year = int.parse(yyyymm.group(1)!);
+      final int month = int.parse(yyyymm.group(2)!);
+      if (month >= 1 && month <= 12) return year * 100 + month;
+    }
+    final RegExpMatch? quarter = RegExp(r'Q([1-4]).*?(\d{4})', caseSensitive: false).firstMatch(label);
+    if (quarter != null) {
+      final int q = int.parse(quarter.group(1)!);
+      final int year = int.parse(quarter.group(2)!);
+      return year * 100 + q * 3;
+    }
+    final RegExpMatch? yearOnly = RegExp(r'^\D*(\d{4})\D*$').firstMatch(label);
+    if (yearOnly != null) {
+      return int.parse(yearOnly.group(1)!) * 100 + 1;
+    }
+    return 0;
+  }
+
+  static NamedRef _namedRef(String? name) {
+    final String display = name ?? '';
+    return NamedRef(id: display.hashCode, name: LocalizedText(en: display));
+  }
+
+  static DeveloperModel _developer(String? name) {
+    final String display = (name != null && name.isNotEmpty) ? name : 'Unknown Developer';
+    return DeveloperModel(id: display.hashCode, name: display);
+  }
+
+  static List<PropertyImageModel> _images(Map<String, dynamic> json) {
+    return (json['images'] as List<dynamic>? ?? <dynamic>[])
+        .map((dynamic e) => PropertyImageModel(url: e as String? ?? '', type: 1))
+        .where((PropertyImageModel img) => img.url.isNotEmpty)
+        .toList();
+  }
+
   factory ProjectModel.fromListJson(Map<String, dynamic> json) {
+    final String deliveryDateLabel = json['delivery_date'] as String? ?? '';
     return ProjectModel(
       id: json['id'] as int,
       title: LocalizedText.fromJson(json['title']),
       cover: json['cover'] as String? ?? '',
-      address: json['address'] as String? ?? '',
-      addressText: json['address_text'] as String? ?? '',
-      deliveryDate: json['delivery_date'] as int? ?? 0,
-      minArea: (json['min_area'] as num?)?.toDouble() ?? 0,
-      lowPrice: (json['low_price'] as num?)?.toDouble() ?? 0,
-      propertyTypeCode: json['property_type'] as int? ?? 0,
-      propertyStatusCode: json['property_status'] as int? ?? 0,
-      salesStatusCode: json['sales_status'] as int? ?? 0,
-      city: NamedRef.fromJson(json['city'] as Map<String, dynamic>?),
-      district: NamedRef.fromJson(json['district'] as Map<String, dynamic>?),
-      developer: DeveloperModel.fromJson(json['developer'] as Map<String, dynamic>?),
-      subunitCount: SubunitCount.fromJson(json['subunit_count'] as Map<String, dynamic>?),
-      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'] as String) : null,
+      address: json['latitude'] != null && json['longitude'] != null
+          ? '${json['latitude']},${json['longitude']}'
+          : '',
+      addressText: '',
+      deliveryDate: _parseDeliveryDate(deliveryDateLabel),
+      deliveryDateLabel: deliveryDateLabel,
+      minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
+      lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
+      propertyTypeCode: 0,
+      propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
+      salesStatusCode: 0,
+      salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
+      city: _namedRef(json['city'] as String?),
+      district: _namedRef(json['district'] as String?),
+      developer: _developer(json['developer_name'] as String?),
+      subunitCount: SubunitCount(value: json['bedroom_labels'] as String? ?? '', label: const LocalizedText()),
+      updatedAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
+      description: LocalizedText.fromJson(json['description']),
+      completionRate: json['completion_rate'] as int?,
+      rentalGuarantee: json['has_rental_guarantee'] as bool?,
+      rentalGuaranteeValue: (json['rental_guarantee_pct'] as num?)?.toDouble(),
+      propertyImages: _images(json),
     );
   }
 
   factory ProjectModel.fromDetailJson(Map<String, dynamic> json) {
-    final dynamic salesStatusRaw = json['sales_status'];
+    final String deliveryDateLabel = json['delivery_date'] as String? ?? '';
     return ProjectModel(
       id: json['id'] as int,
       title: LocalizedText.fromJson(json['title']),
       cover: json['cover'] as String? ?? '',
-      address: json['address'] as String? ?? '',
-      addressText: json['address_text'] as String? ?? '',
-      deliveryDate: json['delivery_date'] as int? ?? 0,
-      minArea: (json['min_area'] as num?)?.toDouble() ?? 0,
-      lowPrice: (json['low_price'] as num?)?.toDouble() ?? 0,
-      propertyTypeCode: json['property_type'] as int? ?? 0,
-      propertyStatusCode: json['property_status'] as int? ?? 0,
-      salesStatusCode: salesStatusRaw is Map<String, dynamic>
-          ? (salesStatusRaw['id'] as int? ?? 0)
-          : (salesStatusRaw as int? ?? 0),
-      salesStatusLabel:
-          salesStatusRaw is Map<String, dynamic> ? LocalizedText.fromJson(salesStatusRaw['name']) : null,
-      city: NamedRef.fromJson(json['city'] as Map<String, dynamic>?),
-      district: NamedRef.fromJson(json['district'] as Map<String, dynamic>?),
-      developer: DeveloperModel.fromJson(json['developer'] as Map<String, dynamic>?),
-      subunitCount: const SubunitCount(value: '', label: LocalizedText()),
+      address: json['latitude'] != null && json['longitude'] != null
+          ? '${json['latitude']},${json['longitude']}'
+          : '',
+      addressText: '',
+      deliveryDate: _parseDeliveryDate(deliveryDateLabel),
+      deliveryDateLabel: deliveryDateLabel,
+      minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
+      lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
+      propertyTypeCode: 0,
+      propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
+      salesStatusCode: 0,
+      salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
+      city: _namedRef(json['city'] as String?),
+      district: _namedRef(json['district'] as String?),
+      developer: _developer(json['developer_name'] as String?),
+      subunitCount: SubunitCount(value: json['bedroom_labels'] as String? ?? '', label: const LocalizedText()),
+      updatedAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
       description: LocalizedText.fromJson(json['description']),
-      downPayment: (json['downPayment'] as num?)?.toDouble(),
       completionRate: json['completion_rate'] as int?,
+      rentalGuarantee: json['has_rental_guarantee'] as bool?,
+      rentalGuaranteeValue: (json['rental_guarantee_pct'] as num?)?.toDouble(),
+      propertyImages: _images(json),
+      downPayment: (json['down_payment_pct'] as num?)?.toDouble(),
       residentialUnits: json['residential_units'] as int?,
       commercialUnits: json['commercial_units'] as int?,
-      paymentMinimumDownPayment: json['payment_minimum_down_payment'] as int?,
-      postDelivery: json['post_delivery'] as bool?,
-      rentalGuarantee: json['guarantee_rental_guarantee'] as bool?,
-      rentalGuaranteeValue: (json['guarantee_rental_guarantee_value'] as num?)?.toDouble(),
-      propertyImages: (json['property_images'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => PropertyImageModel.fromJson(e as Map<String, dynamic>))
+      paymentMinimumDownPayment: json['down_payment_amount'] as int?,
+      postDelivery: json['post_delivery_payment'] as bool?,
+      facilities: (json['amenities'] as List<dynamic>? ?? <dynamic>[])
+          .map((dynamic e) => FacilityModel(id: (e as String).hashCode, name: LocalizedText(en: e)))
           .toList(),
-      facilities: (json['facilities'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => FacilityModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      groupedApartments: (json['grouped_apartments'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => GroupedApartmentModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      // No per-unit-type price/area breakdown in this API — see
+      // GroupedApartmentModel's doc comment. Individual units still come
+      // from the separate /units/ endpoint via [withPropertyUnits].
+      groupedApartments: const <GroupedApartmentModel>[],
       paymentPlans: (json['payment_plans'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => PaymentPlanModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      propertyUnits: (json['property_units'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => PropertyUnitModel.fromJson(e as Map<String, dynamic>))
+          .map((dynamic e) => _paymentPlanFromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
 
+  /// Builds a [PaymentPlanModel] from the API's `{name, down_payment_pct,
+  /// during_construction_pct, on_handover_pct, post_delivery_payment}`
+  /// shape — see that class's doc comment for why this isn't a plain
+  /// `fromJson` on it.
+  static PaymentPlanModel _paymentPlanFromJson(Map<String, dynamic> json) {
+    final List<PaymentPlanValueModel> values = <PaymentPlanValueModel>[];
+    void addPct(String label, dynamic pct) {
+      if (pct != null) values.add(PaymentPlanValueModel(name: label, value: '$pct%'));
+    }
+
+    addPct('Down Payment', json['down_payment_pct']);
+    addPct('During Construction', json['during_construction_pct']);
+    addPct('On Handover', json['on_handover_pct']);
+
+    return PaymentPlanModel(
+      name: LocalizedText(en: json['name'] as String? ?? 'Payment Plan'),
+      description: (json['post_delivery_payment'] as bool? ?? false)
+          ? const LocalizedText(en: 'Post-Handover')
+          : const LocalizedText(),
+      values: values,
+    );
+  }
+
   /// Combines this record with a freshly fetched [detail] record: detail's
-  /// core fields win (they're authoritative/fresher), detail-only
-  /// collections are adopted wholesale, and the developer profile is
-  /// merged so a slim detail-response developer doesn't blank out the
-  /// richer logo/contact info already known from the list response.
+  /// core fields win (they're authoritative/fresher), and detail-only
+  /// collections are adopted wholesale.
   ProjectModel mergeDetail(ProjectModel detail) {
     return ProjectModel(
       id: detail.id,
@@ -488,31 +594,72 @@ class ProjectModel {
       address: detail.address.isNotEmpty ? detail.address : address,
       addressText: detail.addressText.isNotEmpty ? detail.addressText : addressText,
       deliveryDate: detail.deliveryDate != 0 ? detail.deliveryDate : deliveryDate,
+      deliveryDateLabel: detail.deliveryDateLabel.isNotEmpty ? detail.deliveryDateLabel : deliveryDateLabel,
       minArea: detail.minArea != 0 ? detail.minArea : minArea,
       lowPrice: detail.lowPrice != 0 ? detail.lowPrice : lowPrice,
       propertyTypeCode: detail.propertyTypeCode,
       propertyStatusCode: detail.propertyStatusCode,
       salesStatusCode: detail.salesStatusCode,
-      salesStatusLabel: detail.salesStatusLabel,
+      salesStatusLabel: detail.salesStatusLabel ?? salesStatusLabel,
       city: detail.city.id != 0 ? detail.city : city,
       district: detail.district.id != 0 ? detail.district : district,
       developer: detail.developer.mergeWith(developer),
-      subunitCount: subunitCount,
-      updatedAt: updatedAt,
-      description: detail.description,
+      subunitCount: detail.subunitCount.display.isNotEmpty ? detail.subunitCount : subunitCount,
+      updatedAt: detail.updatedAt ?? updatedAt,
+      description: detail.description ?? description,
+      completionRate: detail.completionRate ?? completionRate,
+      rentalGuarantee: detail.rentalGuarantee ?? rentalGuarantee,
+      rentalGuaranteeValue: detail.rentalGuaranteeValue ?? rentalGuaranteeValue,
+      propertyImages: detail.propertyImages.isNotEmpty ? detail.propertyImages : propertyImages,
       downPayment: detail.downPayment,
-      completionRate: detail.completionRate,
       residentialUnits: detail.residentialUnits,
       commercialUnits: detail.commercialUnits,
       paymentMinimumDownPayment: detail.paymentMinimumDownPayment,
       postDelivery: detail.postDelivery,
-      rentalGuarantee: detail.rentalGuarantee,
-      rentalGuaranteeValue: detail.rentalGuaranteeValue,
-      propertyImages: detail.propertyImages,
       facilities: detail.facilities,
       groupedApartments: detail.groupedApartments,
       paymentPlans: detail.paymentPlans,
-      propertyUnits: detail.propertyUnits,
+      propertyUnits: detail.propertyUnits.isNotEmpty ? detail.propertyUnits : propertyUnits,
+    );
+  }
+
+  /// Attaches units fetched from the separate `/properties/{id}/units/`
+  /// endpoint (see [ProjectsRepository.getById]) — everything else about
+  /// the record is left as-is.
+  ProjectModel withPropertyUnits(List<PropertyUnitModel> units) {
+    return ProjectModel(
+      id: id,
+      title: title,
+      cover: cover,
+      address: address,
+      addressText: addressText,
+      deliveryDate: deliveryDate,
+      deliveryDateLabel: deliveryDateLabel,
+      minArea: minArea,
+      lowPrice: lowPrice,
+      propertyTypeCode: propertyTypeCode,
+      propertyStatusCode: propertyStatusCode,
+      salesStatusCode: salesStatusCode,
+      salesStatusLabel: salesStatusLabel,
+      city: city,
+      district: district,
+      developer: developer,
+      subunitCount: subunitCount,
+      updatedAt: updatedAt,
+      description: description,
+      completionRate: completionRate,
+      rentalGuarantee: rentalGuarantee,
+      rentalGuaranteeValue: rentalGuaranteeValue,
+      propertyImages: propertyImages,
+      downPayment: downPayment,
+      residentialUnits: residentialUnits,
+      commercialUnits: commercialUnits,
+      paymentMinimumDownPayment: paymentMinimumDownPayment,
+      postDelivery: postDelivery,
+      facilities: facilities,
+      groupedApartments: groupedApartments,
+      paymentPlans: paymentPlans,
+      propertyUnits: units,
     );
   }
 }

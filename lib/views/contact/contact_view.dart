@@ -18,7 +18,7 @@ class ContactView extends StatelessWidget {
         children: <Widget>[
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: AppColors.scaffoldLight, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[

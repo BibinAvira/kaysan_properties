@@ -208,6 +208,11 @@ class TopPropertySection extends ConsumerWidget {
               matches.sort(ProjectModel.compareHandoverSoonest);
             }
             if (matches.isEmpty) {
+              // A status filter was just picked and nothing loaded so far
+              // matches — HomeStatusFilterController.set already kicked
+              // off fetching further pages; show that instead of a flat
+              // "nothing here", since a match will very likely show up.
+              if (state.isSearchingDeeper) return const FeaturedCardShimmer();
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Text('No properties match this filter yet.',
@@ -243,17 +248,31 @@ class TopPropertySection extends ConsumerWidget {
 
 /// "Developers We Work With" — derived from loaded projects, shown as a
 /// wrapping grid of chips rather than a horizontal scroller so everything
-/// is visible at a glance on a phone screen.
-class DevelopersSection extends ConsumerWidget {
+/// is visible at a glance on a phone screen. Tapping a chip filters the
+/// Listings screen to that developer. Collapsed to [_collapsedCount] chips
+/// initially with a "Read More" toggle, since the full list can run to
+/// dozens of developers.
+class DevelopersSection extends ConsumerStatefulWidget {
   const DevelopersSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DevelopersSection> createState() => _DevelopersSectionState();
+}
+
+class _DevelopersSectionState extends ConsumerState<DevelopersSection> {
+  static const int _collapsedCount = 8;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final AsyncValue<List<DeveloperModel>> developers =
         ref.watch(developersProvider);
     return developers.maybeWhen(
       data: (List<DeveloperModel> list) {
         if (list.isEmpty) return const SizedBox.shrink();
+        final bool canCollapse = list.length > _collapsedCount;
+        final List<DeveloperModel> visible =
+            _expanded || !canCollapse ? list : list.take(_collapsedCount).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -263,23 +282,36 @@ class DevelopersSection extends ConsumerWidget {
               child: Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: list
-                    .map((DeveloperModel developer) => Container(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.divider),
-                          ),
-                          child: Text(
-                            developer.name,
-                            style: Theme.of(context).textTheme.labelLarge,
+                children: visible
+                    .map((DeveloperModel developer) => InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => context
+                              .push(RouteNames.developerDetailsPath(developer.id)),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.divider),
+                            ),
+                            child: Text(
+                              developer.name,
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
                           ),
                         ))
                     .toList(),
               ),
             ),
+            if (canCollapse)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: TextButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(_expanded ? 'Show Less' : 'Read More'),
+                ),
+              ),
           ],
         );
       },

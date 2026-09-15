@@ -17,10 +17,32 @@ class ProjectsService {
 
   final ApiService _api;
 
-  Future<PagedResult<ProjectModel>> fetchProjectsPage({int page = 1}) async {
+  /// [pageSize] defaults to the API's max (100, vs. its own default of 24)
+  /// so scrolling through the general (unfiltered) feed means far fewer
+  /// round trips.
+  ///
+  /// [developer]/[district]/[search] map straight to the API's own
+  /// `developer=`/`district=` (partial match) and `search=` (title/city/
+  /// district/developer/description) query params — passed through only
+  /// when non-empty, so the server does the matching across the full
+  /// catalog instead of the client only ever seeing whatever pages happened
+  /// to be loaded already.
+  Future<PagedResult<ProjectModel>> fetchProjectsPage({
+    int page = 1,
+    int pageSize = 100,
+    String? developer,
+    String? district,
+    String? search,
+  }) async {
     final Map<String, dynamic> envelope = await _api.get(
       '/properties/',
-      queryParameters: <String, dynamic>{'page': page},
+      queryParameters: <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+        if (developer != null && developer.isNotEmpty) 'developer': developer,
+        if (district != null && district.isNotEmpty) 'district': district,
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
     );
     return PagedResult<ProjectModel>.fromJson(envelope, ProjectModel.fromListJson);
   }

@@ -208,6 +208,7 @@ class PropertyUnitModel {
     this.floorNo,
     this.floorPlanImage,
     this.status = '',
+    this.bedroomLabel = '',
   });
 
   final int id;
@@ -217,6 +218,10 @@ class PropertyUnitModel {
   final int? floorNo;
   final String? floorPlanImage;
   final String status;
+
+  /// The unit's type/bedroom count, e.g. "Studio", "2" — the API's
+  /// `bedroom_label`. Shown as the unit's "type" in the units list.
+  final String bedroomLabel;
 
   factory PropertyUnitModel.fromJson(Map<String, dynamic> json) {
     return PropertyUnitModel(
@@ -229,6 +234,7 @@ class PropertyUnitModel {
       floorNo: int.tryParse('${json['floor_no'] ?? ''}'),
       floorPlanImage: json['floor_plan_image'] as String?,
       status: json['status'] as String? ?? '',
+      bedroomLabel: json['bedroom_label'] as String? ?? '',
     );
   }
 }
@@ -294,6 +300,7 @@ class ProjectModel {
     required this.minArea,
     required this.lowPrice,
     required this.propertyTypeCode,
+    required this.propertyType,
     required this.propertyStatusCode,
     required this.salesStatusCode,
     required this.city,
@@ -330,6 +337,7 @@ class ProjectModel {
   final double minArea;
   final double lowPrice;
   final int propertyTypeCode;
+  final String propertyType; // raw API string, e.g. "Apartment, Villa"
   final int propertyStatusCode; // 1 = Ready, 2 = Off-Plan (see propertyStatusLabel)
   final int salesStatusCode;
   final NamedRef city;
@@ -359,6 +367,24 @@ class ProjectModel {
   final List<PropertyUnitModel> propertyUnits;
 
   bool get isDetailLoaded => description != null;
+
+  /// True for a project still marked "Off-Plan" whose handover date has
+  /// already passed — almost certainly stale/uncorrected source data
+  /// (a genuinely off-plan project can't have already been handed over),
+  /// so it's filtered out of the browsable catalog by
+  /// [ProjectsRepository] rather than shown as an "upcoming" listing.
+  /// A `Ready` property with a past date is fine — that's just what
+  /// "already delivered" means — so this only ever applies to code `2`.
+  bool get isStaleOffPlan {
+    final DateTime? handover = handoverDate;
+    if (propertyStatusCode != 2 || handover == null) return false;
+    final DateTime now = DateTime.now();
+    // Compared against the start of the current month, not the exact
+    // instant — handoverDate itself is only ever month-precision (day
+    // fixed to the 1st), so a handover dated this same month shouldn't
+    // read as "already past" just because today is later in it.
+    return handover.isBefore(DateTime(now.year, now.month, 1));
+  }
 
   double? get latitude => _addressParts.$1;
   double? get longitude => _addressParts.$2;
@@ -437,34 +463,107 @@ class ProjectModel {
     return 0;
   }
 
+  static const Map<String, int> _monthNames = <String, int>{
+    'jan': 1, 'january': 1,
+    'feb': 2, 'february': 2,
+    'mar': 3, 'march': 3,
+    'apr': 4, 'april': 4,
+    'may': 5,
+    'jun': 6, 'june': 6,
+    'jul': 7, 'july': 7,
+    'aug': 8, 'august': 8,
+    'sep': 9, 'sept': 9, 'september': 9,
+    'oct': 10, 'october': 10,
+    'nov': 11, 'november': 11,
+    'dec': 12, 'december': 12,
+  };
+
+  /// The catalog's earliest plausible real handover year. Below this, a
+  /// parsed date is treated as unsortable/unset rather than real — see
+  /// [_parseDeliveryDate]'s doc comment for why this matters.
+  static const int _earliestPlausibleYear = 2000;
+
   /// Best-effort turns a free-text delivery date into a sortable `YYYYMM`
-  /// int, so [ProjectSort.handoverSoonest] keeps working. In practice the
-  /// live catalog sends a plain `"YYYYMM"` code (e.g. `"202609"`) far more
-  /// often than the doc's prose example ("Q4 2027"), so that exact form is
-  /// checked first — matching the quarter/year regexes against a 6-digit
-  /// code would otherwise misread its first 4 digits as a year and default
-  /// the month to January. Returns 0 (unsortable) for anything else, e.g.
-  /// an empty string on a ready property.
+  /// int, so [ProjectSort.handoverSoonest] keeps working. The live catalog
+  /// sends a mix of formats — a plain `"YYYYMM"` code (e.g. `"202609"`),
+  /// `"Q4 2027"`, a month name (`"December 2027"`, `"june 2029"`), a full
+  /// date (`"2028-09-30"`), or an empty string for a `Ready` property —
+  /// far more variety than the integration doc's single example suggests.
+  ///
+  /// A number of entries also send the literal string `"197001"` — an
+  /// upstream data artifact (almost certainly an unset/zero timestamp on
+  /// their side rendered as "Jan 1970") rather than a real handover date.
+  /// No genuine off-plan or ready property predates [_earliestPlausibleYear],
+  /// so any parse landing before it is treated the same as "no date" —
+  /// this is what fixes handover dates showing as 1970 in the app.
+  ///
+  /// Returns 0 (unsortable/unset) for anything unparseable or implausible.
   static int _parseDeliveryDate(String? label) {
     if (label == null || label.isEmpty) return 0;
+
     final RegExpMatch? yyyymm = RegExp(r'^(\d{4})(\d{2})$').firstMatch(label);
     if (yyyymm != null) {
       final int year = int.parse(yyyymm.group(1)!);
       final int month = int.parse(yyyymm.group(2)!);
-      if (month >= 1 && month <= 12) return year * 100 + month;
+      if (month >= 1 && month <= 12 && year >= _earliestPlausibleYear) {
+        return year * 100 + month;
+      }
+      return 0;
     }
-    final RegExpMatch? quarter = RegExp(r'Q([1-4]).*?(\d{4})', caseSensitive: false).firstMatch(label);
+
+    final RegExpMatch? isoDate = RegExp(r'^(\d{4})[-/](\d{1,2})[-/]\d{1,2}$').firstMatch(label);
+    if (isoDate != null) {
+      final int year = int.parse(isoDate.group(1)!);
+      final int month = int.parse(isoDate.group(2)!);
+      if (month >= 1 && month <= 12 && year >= _earliestPlausibleYear) {
+        return year * 100 + month;
+      }
+      return 0;
+    }
+
+    final RegExpMatch? quarter = RegExp(r'Q\s*([1-4]).*?(\d{4})', caseSensitive: false).firstMatch(label);
     if (quarter != null) {
       final int q = int.parse(quarter.group(1)!);
       final int year = int.parse(quarter.group(2)!);
+      if (year < _earliestPlausibleYear) return 0;
       return year * 100 + q * 3;
     }
+
+    final RegExpMatch? monthName =
+        RegExp(r'([A-Za-z]+)\D{0,4}(\d{4})', caseSensitive: false).firstMatch(label);
+    if (monthName != null) {
+      final int? month = _monthNames[monthName.group(1)!.toLowerCase()];
+      final int year = int.parse(monthName.group(2)!);
+      if (month != null && year >= _earliestPlausibleYear) {
+        return year * 100 + month;
+      }
+    }
+
     final RegExpMatch? yearOnly = RegExp(r'^\D*(\d{4})\D*$').firstMatch(label);
     if (yearOnly != null) {
-      return int.parse(yearOnly.group(1)!) * 100 + 1;
+      final int year = int.parse(yearOnly.group(1)!);
+      if (year >= _earliestPlausibleYear) return year * 100 + 1;
     }
+
     return 0;
   }
+
+  /// True if [label] contains a 4-digit year token older than
+  /// [_earliestPlausibleYear] — used to blank out known sentinel garbage
+  /// (e.g. `"197001"`) from the *displayed* fallback label too, not just
+  /// the sortable [deliveryDate] int, so a raw meaningless string like
+  /// "197001" never reaches the screen even as plain text.
+  static bool _looksLikeSentinelYear(String label) {
+    final RegExpMatch? anyYear = RegExp(r'(\d{4})').firstMatch(label);
+    if (anyYear == null) return false;
+    return int.parse(anyYear.group(1)!) < _earliestPlausibleYear;
+  }
+
+  /// The API's raw `delivery_date` with known sentinel garbage (see
+  /// [_looksLikeSentinelYear]) blanked out, so [deliveryDateLabel] never
+  /// shows something meaningless like "197001" even as a last-resort
+  /// fallback string.
+  static String _cleanDeliveryDateLabel(String raw) => _looksLikeSentinelYear(raw) ? '' : raw;
 
   static NamedRef _namedRef(String? name) {
     final String display = name ?? '';
@@ -484,7 +583,7 @@ class ProjectModel {
   }
 
   factory ProjectModel.fromListJson(Map<String, dynamic> json) {
-    final String deliveryDateLabel = json['delivery_date'] as String? ?? '';
+    final String deliveryDateLabel = _cleanDeliveryDateLabel(json['delivery_date'] as String? ?? '');
     return ProjectModel(
       id: json['id'] as int,
       title: LocalizedText.fromJson(json['title']),
@@ -498,6 +597,7 @@ class ProjectModel {
       minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
       lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
       propertyTypeCode: 0,
+      propertyType: json['property_type'] as String? ?? '',
       propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
       salesStatusCode: 0,
       salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
@@ -515,7 +615,7 @@ class ProjectModel {
   }
 
   factory ProjectModel.fromDetailJson(Map<String, dynamic> json) {
-    final String deliveryDateLabel = json['delivery_date'] as String? ?? '';
+    final String deliveryDateLabel = _cleanDeliveryDateLabel(json['delivery_date'] as String? ?? '');
     return ProjectModel(
       id: json['id'] as int,
       title: LocalizedText.fromJson(json['title']),
@@ -529,6 +629,7 @@ class ProjectModel {
       minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
       lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
       propertyTypeCode: 0,
+      propertyType: json['property_type'] as String? ?? '',
       propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
       salesStatusCode: 0,
       salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
@@ -598,6 +699,7 @@ class ProjectModel {
       minArea: detail.minArea != 0 ? detail.minArea : minArea,
       lowPrice: detail.lowPrice != 0 ? detail.lowPrice : lowPrice,
       propertyTypeCode: detail.propertyTypeCode,
+      propertyType: detail.propertyType.isNotEmpty ? detail.propertyType : propertyType,
       propertyStatusCode: detail.propertyStatusCode,
       salesStatusCode: detail.salesStatusCode,
       salesStatusLabel: detail.salesStatusLabel ?? salesStatusLabel,
@@ -638,6 +740,7 @@ class ProjectModel {
       minArea: minArea,
       lowPrice: lowPrice,
       propertyTypeCode: propertyTypeCode,
+      propertyType: propertyType,
       propertyStatusCode: propertyStatusCode,
       salesStatusCode: salesStatusCode,
       salesStatusLabel: salesStatusLabel,

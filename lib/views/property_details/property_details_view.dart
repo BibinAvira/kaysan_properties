@@ -114,7 +114,7 @@ class _DetailsContent extends ConsumerWidget {
                       indicatorWeight: 3,
                       tabs: <Widget>[
                         Tab(text: 'Overview'),
-                        Tab(text: 'Floor Plans'),
+                        Tab(text: 'Unit Details'),
                         Tab(text: 'Location'),
                       ],
                     ),
@@ -329,30 +329,33 @@ class _OverviewTab extends StatelessWidget {
                     label: const Text('Mortgage & ROI Calculator'),
                   ),
                 ),
-                if (descriptionText.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 20),
-                  Text('About this project',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 6),
-                  Text(descriptionText,
-                      style: Theme.of(context).textTheme.bodyLarge),
-                ],
+                const SizedBox(height: 20),
+                Text('About this project',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text(
+                  descriptionText.isNotEmpty
+                      ? descriptionText
+                      : 'No description provided for this project yet.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ],
             ),
           ),
-          if (project.paymentPlans.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Payment Plan',
-                  style: Theme.of(context).textTheme.titleMedium),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: PaymentPlanCard(plans: project.paymentPlans),
-            ),
-          ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text('Payment Plan',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: project.paymentPlans.isNotEmpty
+                ? PaymentPlanCard(plans: project.paymentPlans)
+                : Text('Payment plan details are not available for this project yet.',
+                    style: Theme.of(context).textTheme.bodyMedium),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -367,6 +370,10 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
+/// Key facts grid. Always shows Starting Price and Status; everything else
+/// (Handover, Property Type, Area, Unit Type, Units) only appears when the
+/// API actually returned that data for this property, rather than a fixed
+/// set of slots padded out with placeholder dashes.
 class _KeyFactsRow extends StatelessWidget {
   const _KeyFactsRow({required this.project});
   final ProjectModel project;
@@ -374,47 +381,46 @@ class _KeyFactsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DateTime? handover = project.handoverDate;
-    final String unitsLabel = project.residentialUnits != null
-        ? '${project.residentialUnits}'
-        : (project.subunitCount.display.isNotEmpty
-            ? project.subunitCount.display
-            : '—');
+
+    final List<(String, String)> facts = <(String, String)>[
+      (
+        'Starting Price',
+        project.lowPrice > 0 ? Formatters.priceCompact(project.lowPrice) : 'On Request',
+      ),
+      ('Status', project.salesStatusDisplay),
+      // Hidden entirely (rather than falling back to a status word) when
+      // there's no real handover date — see ProjectModel._parseDeliveryDate
+      // for why a date isn't always available even for an Off-Plan project.
+      if (handover != null) ('Handover', Formatters.handoverLabel(handover)),
+      if (project.propertyType.isNotEmpty) ('Property Type', project.propertyType),
+      if (project.minArea > 0) ('Area', 'From ${project.minArea.toStringAsFixed(0)} sq.ft'),
+      if (project.subunitCount.display.isNotEmpty) ('Unit Type', project.subunitCount.display),
+      if (project.residentialUnits != null) ('Units', '${project.residentialUnits}'),
+    ];
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: AppColors.scaffoldLight,
+          color: Theme.of(context).cardColor,
+          border: Border.all(color: Theme.of(context).dividerColor),
           borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: <Widget>[
-          _fact(
-              context,
-              'Starting Price',
-              project.lowPrice > 0
-                  ? Formatters.priceCompact(project.lowPrice)
-                  : 'On Request'),
-          _divider(),
-          _fact(
-              context,
-              'Handover',
-              handover != null
-                  ? Formatters.handoverLabel(handover)
-                  : (project.deliveryDateLabel.isNotEmpty
-                      ? project.deliveryDateLabel
-                      : project.propertyStatusLabel)),
-          _divider(),
-          _fact(context, 'Units', unitsLabel),
-        ],
+      child: Wrap(
+        spacing: 20,
+        runSpacing: 14,
+        children: facts.map(((String, String) f) => _fact(context, f.$1, f.$2)).toList(),
       ),
     );
   }
 
   Widget _fact(BuildContext context, String label, String value) {
-    return Expanded(
+    return SizedBox(
+      width: 130,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -424,7 +430,4 @@ class _KeyFactsRow extends StatelessWidget {
       ),
     );
   }
-
-  Widget _divider() =>
-      Container(width: 1, height: 32, color: AppColors.divider);
 }

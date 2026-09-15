@@ -11,7 +11,7 @@ class ThemeModeController extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
     _restore();
-    return ThemeMode.light;
+    return ThemeMode.dark; // TEMP: dark-mode visual QA, reverting after
   }
 
   Future<void> _restore() async {

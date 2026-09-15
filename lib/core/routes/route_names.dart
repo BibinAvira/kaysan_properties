@@ -10,6 +10,7 @@ class RouteNames {
   static const String propertyDetails = '/property/:id';
   static const String areas = '/areas';
   static const String areaDetails = '/areas/:id';
+  static const String developerDetails = '/developers/:id';
   static const String blogs = '/blogs';
   static const String blogDetails = '/blogs/:id';
   static const String favorites = '/favorites';
@@ -25,5 +26,6 @@ class RouteNames {
 
   static String propertyDetailsPath(int id) => '/property/$id';
   static String areaDetailsPath(int id) => '/areas/$id';
+  static String developerDetailsPath(int id) => '/developers/$id';
   static String blogDetailsPath(int id) => '/blogs/$id';
 }

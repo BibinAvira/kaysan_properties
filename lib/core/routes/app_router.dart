@@ -10,6 +10,7 @@ import '../../views/blogs/blogs_view.dart';
 import '../../views/calculator/calculator_view.dart';
 import '../../views/common/common_views.dart';
 import '../../views/contact/contact_view.dart';
+import '../../views/developers/developer_details_view.dart';
 import '../../views/favorites/favorites_view.dart';
 import '../../views/home/home_view.dart';
 import '../../views/legal/legal_views.dart';
@@ -26,7 +27,7 @@ import 'route_names.dart';
 /// everything else (Property Details, Search, Areas, Blogs, Contact, Legal)
 /// is pushed on top via ordinary [GoRoute]s so it covers the bottom nav.
 final GoRouter appRouter = GoRouter(
-  initialLocation: RouteNames.splash,
+  initialLocation: RouteNames.contact, // TEMP: dark-mode visual QA, reverting after
   errorBuilder: (BuildContext context, GoRouterState state) =>
       AppErrorView(message: 'Page not found: ${state.uri}'),
   routes: <RouteBase>[
@@ -70,6 +71,13 @@ final GoRouter appRouter = GoRouter(
       builder: (BuildContext context, GoRouterState state) {
         final int id = int.parse(state.pathParameters['id']!);
         return AreaDetailsView(districtId: id);
+      },
+    ),
+    GoRoute(
+      path: RouteNames.developerDetails,
+      builder: (BuildContext context, GoRouterState state) {
+        final int id = int.parse(state.pathParameters['id']!);
+        return DeveloperDetailsView(developerId: id);
       },
     ),
     GoRoute(

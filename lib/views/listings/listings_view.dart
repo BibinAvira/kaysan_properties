@@ -48,6 +48,25 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
     }
   }
 
+  /// Refreshes both the general feed and — since [FilteredProjectsController]
+  /// doesn't watch [projectsProvider] at all while a search/developer/
+  /// district filter is active (it queries the server directly instead) —
+  /// the filtered result set too. Refreshing only [projectsProvider] would
+  /// silently do nothing visible whenever a filter/search is applied.
+  Future<void> _refresh() async {
+    await ref.read(projectsProvider.notifier).refresh();
+    ref.invalidate(filteredProjectsProvider);
+    try {
+      // Awaited only so the pull-to-refresh spinner stays visible until the
+      // re-fetch actually finishes; any failure already surfaces through
+      // `filtered.when`'s error branch once the provider rebuilds, so it's
+      // swallowed here rather than crashing the refresh gesture.
+      await ref.read(filteredProjectsProvider.future);
+    } catch (_) {
+      // Ignored — see above.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<List<ProjectModel>> filtered =
@@ -95,31 +114,40 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => ref.read(projectsProvider.notifier).refresh(),
+              onRefresh: _refresh,
               child: filtered.when(
                 loading: () => const PropertyGridShimmer(),
-                error: (Object e, StackTrace st) => EmptyStateView(
-                  icon: Icons.error_outline,
-                  title: 'Something went wrong',
-                  message:
-                      'We could not load the listings. Pull down to try again.',
-                  actionLabel: 'Retry',
-                  onActionTap: () =>
-                      ref.read(projectsProvider.notifier).refresh(),
+                error: (Object e, StackTrace st) => _scrollableEmptyState(
+                  EmptyStateView(
+                    icon: Icons.error_outline,
+                    title: 'Something went wrong',
+                    message:
+                        'We could not load the listings. Pull down to try again.',
+                    actionLabel: 'Retry',
+                    onActionTap: _refresh,
+                  ),
                 ),
                 data: (List<ProjectModel> list) {
                   if (list.isEmpty) {
-                    return const EmptyStateView(
-                      icon: Icons.search_off,
-                      title: 'No properties found',
-                      message:
-                          'Try adjusting your search or filters, or keep scrolling to load more.',
+                    // Pull-to-refresh needs a Scrollable descendant to
+                    // detect the drag — a bare EmptyStateView (just a
+                    // Center/Column) doesn't provide one, which is why
+                    // refresh silently did nothing whenever the list (or
+                    // a search/filter) came back empty.
+                    return _scrollableEmptyState(
+                      const EmptyStateView(
+                        icon: Icons.search_off,
+                        title: 'No properties found',
+                        message:
+                            'Try adjusting your search or filters, or keep scrolling to load more.',
+                      ),
                     );
                   }
                   final Set<int> favIds = favorites.maybeWhen(
                       data: (Set<int> s) => s, orElse: () => <int>{});
                   return CustomScrollView(
                     controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
                     slivers: <Widget>[
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -175,6 +203,23 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Wraps an [EmptyStateView] (or any non-scrolling widget) in an
+  /// always-scrollable list so the enclosing [RefreshIndicator] has a
+  /// Scrollable to detect the pull gesture on — without this, pulling down
+  /// while the empty/error state is showing does nothing at all.
+  Widget _scrollableEmptyState(Widget child) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: <Widget>[
+            SizedBox(height: constraints.maxHeight, child: child),
+          ],
+        );
+      },
     );
   }
 }

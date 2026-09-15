@@ -89,13 +89,31 @@ class AreasView extends ConsumerWidget {
   }
 }
 
-/// Area Details — every loaded project located within that district.
-class AreaDetailsView extends ConsumerWidget {
+/// Area Details — every one of that district's projects, not just whatever
+/// happened to already be loaded from the main feed's pagination (mirrors
+/// [DeveloperDetailsView]'s use of [ProjectsController.loadAll]).
+class AreaDetailsView extends ConsumerStatefulWidget {
   const AreaDetailsView({super.key, required this.districtId});
   final int districtId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AreaDetailsView> createState() => _AreaDetailsViewState();
+}
+
+class _AreaDetailsViewState extends ConsumerState<AreaDetailsView> {
+  @override
+  void initState() {
+    super.initState();
+    // "This area's projects" means all of them — not just whichever page
+    // happened to load first — so pull in the rest of the catalog once, in
+    // the background, past whatever's already loaded.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(projectsProvider.notifier).loadAll();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final AsyncValue<ProjectsPageState> pageState = ref.watch(projectsProvider);
     final AsyncValue<Set<int>> favorites = ref.watch(favoritesProvider);
 
@@ -105,41 +123,47 @@ class AreaDetailsView extends ConsumerWidget {
         body: EmptyStateView(icon: Icons.error_outline, title: 'Area not found', message: 'Please go back and try again.'),
       ),
       data: (ProjectsPageState state) {
-        final List<ProjectModel> inArea = state.items.where((ProjectModel p) => p.district.id == districtId).toList();
+        final List<ProjectModel> inArea =
+            state.items.where((ProjectModel p) => p.district.id == widget.districtId).toList();
         final String areaName = inArea.isNotEmpty ? inArea.first.district.name.display : 'Area';
 
         return Scaffold(
           appBar: AppBar(title: Text(areaName)),
-          body: inArea.isEmpty
-              ? const EmptyStateView(
-                  icon: Icons.map_outlined,
-                  title: 'No projects loaded for this area yet',
-                  message: 'Keep scrolling the Listings tab to load more properties.',
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 0.66,
+          body: RefreshIndicator(
+            onRefresh: () => ref.read(projectsProvider.notifier).loadAll(),
+            child: inArea.isEmpty
+                ? (state.isSearchingDeeper
+                    ? const PropertyGridShimmer()
+                    : const EmptyStateView(
+                        icon: Icons.map_outlined,
+                        title: 'No projects found',
+                        message: 'This area has no active listings right now.',
+                      ))
+                : GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: 0.66,
+                    ),
+                    itemCount: inArea.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final ProjectModel project = inArea[index];
+                      final Set<int> favIds = favorites.maybeWhen(data: (Set<int> s) => s, orElse: () => <int>{});
+                      return PropertyCard(
+                        project: project,
+                        isFavorite: favIds.contains(project.id),
+                        onFavoriteTap: () async {
+                          if (await requireAuth(context, ref)) {
+                            ref.read(favoritesProvider.notifier).toggle(project.id);
+                          }
+                        },
+                        onTap: () => context.push(RouteNames.propertyDetailsPath(project.id)),
+                      );
+                    },
                   ),
-                  itemCount: inArea.length,
-                  itemBuilder: (BuildContext context, int index) {
-                    final ProjectModel project = inArea[index];
-                    final Set<int> favIds = favorites.maybeWhen(data: (Set<int> s) => s, orElse: () => <int>{});
-                    return PropertyCard(
-                      project: project,
-                      isFavorite: favIds.contains(project.id),
-                      onFavoriteTap: () async {
-                        if (await requireAuth(context, ref)) {
-                          ref.read(favoritesProvider.notifier).toggle(project.id);
-                        }
-                      },
-                      onTap: () => context.push(RouteNames.propertyDetailsPath(project.id)),
-                    );
-                  },
-                ),
+          ),
         );
       },
     );

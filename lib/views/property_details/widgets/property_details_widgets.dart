@@ -26,6 +26,8 @@ class _ImageGalleryState extends State<ImageGallery> {
   Widget build(BuildContext context) {
     final List<String> images =
         widget.images.isEmpty ? <String>[''] : widget.images;
+    final bool hasMultiple = images.length > 1;
+
     return SizedBox(
       height: 280,
       child: Stack(
@@ -41,6 +43,59 @@ class _ImageGalleryState extends State<ImageGallery> {
               );
             },
           ),
+          if (hasMultiple) ...<Widget>[
+            Positioned(
+              left: 10,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _GalleryArrowButton(
+                  icon: Icons.chevron_left,
+                  onTap: _index > 0
+                      ? () => _controller.previousPage(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut)
+                      : null,
+                ),
+              ),
+            ),
+            Positioned(
+              right: 10,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _GalleryArrowButton(
+                  icon: Icons.chevron_right,
+                  onTap: _index < images.length - 1
+                      ? () => _controller.nextPage(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut)
+                      : null,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 14,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List<Widget>.generate(
+                  images.length,
+                  (int i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _index ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i == _index ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           Positioned(
             bottom: 12,
             right: 12,
@@ -78,6 +133,31 @@ class _ImageGalleryState extends State<ImageGallery> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Prev/next chevron overlay for [ImageGallery] — dimmed and non-tappable
+/// (rather than hidden) at either end, so the control doesn't jump around
+/// as the user pages through.
+class _GalleryArrowButton extends StatelessWidget {
+  const _GalleryArrowButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? 0.35 : 1,
+      child: LiquidGlassCircle(
+        icon: icon,
+        iconColor: Colors.white,
+        size: 32,
+        iconSize: 20,
+        blur: 20,
+        tintOpacity: 0.18,
+        onTap: onTap ?? () {},
       ),
     );
   }
@@ -165,8 +245,10 @@ class FacilitiesGrid extends StatelessWidget {
   }
 }
 
-/// Floor-plan summary cards (from `grouped_apartments`) plus an expandable
-/// list of individually listed units (from `property_units`) beneath them.
+/// "Unit Details" tab: floor-plan summary cards (from `grouped_apartments`,
+/// currently always empty for this API — see [GroupedApartmentModel]'s doc
+/// comment) plus the individually listed units fetched from the project's
+/// `/units/` endpoint, each showing its type, area, status and price.
 class FloorPlansTab extends StatelessWidget {
   const FloorPlansTab(
       {super.key,
@@ -245,10 +327,22 @@ class FloorPlansTab extends StatelessWidget {
                 dense: true,
                 leading: const Icon(Icons.door_front_door_outlined,
                     color: AppColors.gold),
-                title: Text('Unit ${unit.aptNo}'),
-                subtitle: unit.area != null
-                    ? Text('${unit.area!.toStringAsFixed(0)} sq.ft')
-                    : null,
+                title: Text(unit.bedroomLabel.isNotEmpty
+                    ? 'Unit ${unit.aptNo} · ${unit.bedroomLabel}'
+                    : 'Unit ${unit.aptNo}'),
+                subtitle: Row(
+                  children: <Widget>[
+                    if (unit.area != null)
+                      Text('${unit.area!.toStringAsFixed(0)} sq.ft'),
+                    if (unit.area != null && _unitStatusLabel(unit.status) != null)
+                      const Text('  ·  '),
+                    if (_unitStatusLabel(unit.status) case final String label)
+                      Text(label,
+                          style: TextStyle(
+                              color: _unitStatusColor(unit.status),
+                              fontWeight: FontWeight.w600)),
+                  ],
+                ),
                 trailing: unit.price != null
                     ? Text(Formatters.priceCompact(unit.price!))
                     : null,
@@ -264,6 +358,35 @@ class FloorPlansTab extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// Display label for a unit's `status` (`available`/`reserved`/`sold`/
+  /// `unknown` per the API) — null for "unknown" or empty, since that
+  /// tells the user nothing worth showing.
+  static String? _unitStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'available':
+        return 'Available';
+      case 'reserved':
+        return 'Reserved';
+      case 'sold':
+        return 'Sold';
+      default:
+        return null;
+    }
+  }
+
+  static Color _unitStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'available':
+        return AppColors.success;
+      case 'reserved':
+        return AppColors.warning;
+      case 'sold':
+        return AppColors.error;
+      default:
+        return AppColors.textSecondaryLight;
+    }
   }
 }
 
@@ -282,7 +405,8 @@ class PaymentPlanCard extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.scaffoldLight,
+                  color: Theme.of(context).cardColor,
+                  border: Border.all(color: Theme.of(context).dividerColor),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(

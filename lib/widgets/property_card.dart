@@ -46,11 +46,14 @@ class PropertyCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: <Widget>[
                     AppNetworkImage(url: project.cover),
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: _Badge(text: _handoverLabel(project)),
-                    ),
+                    if (project.handoverDate != null)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: _Badge(
+                          text: 'Handover: ${Formatters.handoverLabel(project.handoverDate!)}',
+                        ),
+                      ),
                     Positioned(
                       top: 6,
                       right: 6,
@@ -128,13 +131,6 @@ class PropertyCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _handoverLabel(ProjectModel project) {
-    final DateTime? handover = project.handoverDate;
-    if (handover != null) return 'Handover: ${Formatters.handoverLabel(handover)}';
-    if (project.deliveryDateLabel.isNotEmpty) return 'Handover: ${project.deliveryDateLabel}';
-    return project.propertyStatusLabel;
   }
 }
 

@@ -12,12 +12,20 @@ class ProjectsPageState {
     this.items = const <ProjectModel>[],
     this.nextPageUrl,
     this.isLoadingMore = false,
+    this.isSearchingDeeper = false,
     this.totalCount = 0,
   });
 
   final List<ProjectModel> items;
   final String? nextPageUrl;
   final bool isLoadingMore;
+
+  /// True while [ProjectsController.loadUntilMatch] is fetching additional
+  /// pages on the caller's behalf (e.g. a search/filter that found nothing
+  /// in what's loaded so far) — distinct from [isLoadingMore] so the UI can
+  /// show "still searching…" rather than the plain scroll-pagination
+  /// footer, or an empty state, while this is happening.
+  final bool isSearchingDeeper;
   final int totalCount;
 
   bool get hasMore => nextPageUrl != null;
@@ -27,12 +35,14 @@ class ProjectsPageState {
     String? nextPageUrl,
     bool clearNextPage = false,
     bool? isLoadingMore,
+    bool? isSearchingDeeper,
     int? totalCount,
   }) {
     return ProjectsPageState(
       items: items ?? this.items,
       nextPageUrl: clearNextPage ? null : (nextPageUrl ?? this.nextPageUrl),
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isSearchingDeeper: isSearchingDeeper ?? this.isSearchingDeeper,
       totalCount: totalCount ?? this.totalCount,
     );
   }
@@ -69,6 +79,63 @@ class ProjectsController extends AsyncNotifier<ProjectsPageState> {
       // Keep existing items visible; just stop showing the loading footer.
       // The user can retry by scrolling again (loadMore is idempotent).
       state = AsyncValue<ProjectsPageState>.data(current.copyWith(isLoadingMore: false));
+    }
+  }
+
+  /// Keeps fetching further pages — via the same [loadMore] used for
+  /// scroll-driven pagination — until [hasMatch] is true against the items
+  /// loaded so far, or the catalog is exhausted (or [maxPages] extra pages
+  /// have been fetched, as a safety cap against a search term that matches
+  /// nothing anywhere in a ~1800-property catalog).
+  ///
+  /// This exists because the X-OPP API has no free-text search of its own
+  /// (only `city`/`property_type`/`min_price`/`max_price`) — search and
+  /// most filtering only ever run client-side over whatever pages have
+  /// already been fetched, so without this, a real match sitting on page 5
+  /// looks identical to "no such property" if only page 1 has loaded.
+  Future<void> loadUntilMatch(
+    bool Function(List<ProjectModel> items) hasMatch, {
+    int maxPages = 40,
+  }) async {
+    if (hasMatch(state.valueOrNull?.items ?? const <ProjectModel>[])) return;
+
+    final ProjectsPageState? initial = state.valueOrNull;
+    if (initial != null) {
+      state = AsyncValue<ProjectsPageState>.data(initial.copyWith(isSearchingDeeper: true));
+    }
+    try {
+      for (int i = 0; i < maxPages; i++) {
+        final ProjectsPageState? current = state.valueOrNull;
+        if (current == null || hasMatch(current.items) || !current.hasMore) return;
+        await loadMore();
+      }
+    } finally {
+      final ProjectsPageState? finalState = state.valueOrNull;
+      if (finalState != null) {
+        state = AsyncValue<ProjectsPageState>.data(finalState.copyWith(isSearchingDeeper: false));
+      }
+    }
+  }
+
+  /// Fetches every remaining page (bounded by [maxPages] as a safety cap)
+  /// rather than stopping at the first match — used by the Developer
+  /// Details page, which needs to show *all* of that developer's projects,
+  /// not just whichever one happened to be loaded first.
+  Future<void> loadAll({int maxPages = 40}) async {
+    final ProjectsPageState? initial = state.valueOrNull;
+    if (initial == null) return;
+    state = AsyncValue<ProjectsPageState>.data(initial.copyWith(isSearchingDeeper: true));
+    try {
+      for (int i = 0; i < maxPages; i++) {
+        final ProjectsPageState? current = state.valueOrNull;
+        if (current == null || !current.hasMore) return;
+        await loadMore();
+      }
+    } finally {
+      final ProjectsPageState? finalState = state.valueOrNull;
+      if (finalState != null) {
+        state = AsyncValue<ProjectsPageState>.data(finalState.copyWith(isSearchingDeeper: false));
+      }
     }
   }
 

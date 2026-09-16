@@ -1,7 +1,7 @@
 name: kaysan_properties
 description: "Kaysan Properties — native Flutter app for Dubai off-plan real estate."
 publish_to: "none"
-version: 1.0.1+1
+version: 1.0.2+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

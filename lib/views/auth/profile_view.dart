@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../models/auth_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/biometric_provider.dart';
 import '../../services/auth_exception.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/glass/liquid_glass.dart';
@@ -436,6 +437,8 @@ class _AccountProfilePanel extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          const _BiometricToggleTile(),
           const SizedBox(height: 28),
           Divider(color: Colors.white.withValues(alpha: 0.12)),
           const SizedBox(height: 16),
@@ -446,6 +449,54 @@ class _AccountProfilePanel extends StatelessWidget {
             accentColor: AppColors.error,
             loading: deleting,
             onTap: deleting ? null : onDeleteAccount,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Face ID/Touch ID sign-in toggle — hidden on devices with no usable
+/// biometrics rather than shown disabled. Turning it on runs a real
+/// biometric check first (see [BiometricSettingsController.setEnabled]),
+/// so the switch can never end up "on" without the device owner having
+/// just proven they can pass it.
+class _BiometricToggleTile extends ConsumerWidget {
+  const _BiometricToggleTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<bool> available = ref.watch(biometricAvailableProvider);
+    final AsyncValue<bool> enabled = ref.watch(biometricSettingsProvider);
+
+    if (!(available.valueOrNull ?? false)) return const SizedBox.shrink();
+
+    return GlassAuthPanel(
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.face_retouching_natural, color: Colors.white, size: 22),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Sign in with Face ID',
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Switch(
+            value: enabled.valueOrNull ?? false,
+            activeColor: AppColors.gold,
+            onChanged: enabled.isLoading
+                ? null
+                : (bool value) async {
+                    final bool applied = await ref
+                        .read(biometricSettingsProvider.notifier)
+                        .setEnabled(value);
+                    if (!applied && value && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not verify Face ID. Please try again.')),
+                      );
+                    }
+                  },
           ),
         ],
       ),

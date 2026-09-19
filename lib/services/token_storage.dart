@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class TokenStorage {
   static const String _accessKey = 'kaysan_access_token';
   static const String _refreshKey = 'kaysan_refresh_token';
+  static const String _biometricEnabledKey = 'kaysan_biometric_enabled';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -25,5 +26,15 @@ class TokenStorage {
   Future<void> clear() async {
     await _storage.delete(key: _accessKey);
     await _storage.delete(key: _refreshKey);
+  }
+
+  /// Whether the signed-in user has opted into unlocking the app with
+  /// Face ID/Touch ID instead of typing their password again on relaunch.
+  Future<bool> isBiometricEnabled() async {
+    return await _storage.read(key: _biometricEnabledKey) == 'true';
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) {
+    return _storage.write(key: _biometricEnabledKey, value: enabled.toString());
   }
 }

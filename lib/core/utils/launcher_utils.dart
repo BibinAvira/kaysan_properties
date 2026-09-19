@@ -1,5 +1,4 @@
 import 'package:share_plus/share_plus.dart';
-import 'package:share_plus/share_plus.dart' as SharePlus;
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_constants.dart';
 
@@ -49,9 +48,7 @@ class LauncherUtils {
     required String title,
     required String url,
   }) async {
-    await SharePlus.Share(
-        //  ShareParams(text: '$title — via Kaysan Properties\n$url'),
-        );
+    await Share.share('$title — via Kaysan Properties\n$url');
   }
 
   static Future<bool> _launch(Uri uri) async {

@@ -6,6 +6,7 @@ import '../../core/routes/route_names.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/auth_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/biometric_provider.dart';
 import '../../widgets/glass/liquid_glass.dart';
 
 /// Welcome / splash screen — a full-bleed hero photo with a dark gradient
@@ -33,6 +34,8 @@ class _SplashViewState extends ConsumerState<SplashView>
 
   bool _minSplashElapsed = false;
   bool _navigatedHome = false;
+  bool _biometricUnlocked = false;
+  bool _biometricPromptShown = false;
 
   @override
   void initState() {
@@ -76,23 +79,62 @@ class _SplashViewState extends ConsumerState<SplashView>
 
   void _loginOrCreateAccount() => context.push(RouteNames.login);
 
+  /// Prompts Face ID/Touch ID. Leaves the unlock panel up (so the person can
+  /// tap "Try Again") on cancellation or failure rather than kicking them
+  /// out to the login screen.
+  Future<void> _attemptBiometricUnlock() async {
+    final bool ok = await ref
+        .read(biometricServiceProvider)
+        .authenticate('Unlock Kaysan Properties');
+    if (!mounted || !ok) return;
+    setState(() => _biometricUnlocked = true);
+  }
+
+  /// Escape hatch for someone who can't pass Face ID right now (different
+  /// person holding the phone, biometrics temporarily failing, ...) — signs
+  /// them out of the gated session so they can log back in with a password
+  /// instead of being stuck on the unlock screen.
+  Future<void> _usePasswordInstead() async {
+    await ref.read(authControllerProvider.notifier).logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<UserModel?> authState = ref.watch(authControllerProvider);
     final bool sessionResolved = !authState.isLoading;
     final bool loggedIn = authState.valueOrNull != null;
+    final bool biometricGateEnabled =
+        ref.watch(biometricSettingsProvider).valueOrNull ?? false;
+    final bool needsBiometricUnlock =
+        loggedIn && biometricGateEnabled && !_biometricUnlocked;
 
-    // Already logged in — skip the button entirely and go straight to
-    // Home once the minimum splash time has passed.
-    if (_minSplashElapsed && sessionResolved && loggedIn && !_navigatedHome) {
+    // Already logged in (and, if Face ID sign-in is enabled, already
+    // unlocked) — skip the button entirely and go straight to Home once the
+    // minimum splash time has passed.
+    if (_minSplashElapsed &&
+        sessionResolved &&
+        loggedIn &&
+        !needsBiometricUnlock &&
+        !_navigatedHome) {
       _navigatedHome = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go(RouteNames.home);
       });
     }
 
-    final bool showChecking =
-        !_minSplashElapsed || !sessionResolved || loggedIn;
+    if (_minSplashElapsed &&
+        sessionResolved &&
+        needsBiometricUnlock &&
+        !_biometricPromptShown) {
+      _biometricPromptShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _attemptBiometricUnlock();
+      });
+    }
+
+    final bool showChecking = !_minSplashElapsed ||
+        !sessionResolved ||
+        (loggedIn && !needsBiometricUnlock);
 
     return Scaffold(
       backgroundColor: AppColors.primaryNavy,
@@ -137,7 +179,13 @@ class _SplashViewState extends ConsumerState<SplashView>
                       position: _slideUp,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
-                        child: showChecking
+                        child: needsBiometricUnlock
+                            ? _BiometricUnlockPanel(
+                                key: const ValueKey('unlock'),
+                                onUnlock: _attemptBiometricUnlock,
+                                onUsePassword: _usePasswordInstead,
+                              )
+                            : showChecking
                             ? const _CheckingSessionIndicator(
                                 key: ValueKey('checking'))
                             : Column(
@@ -169,6 +217,42 @@ class _SplashViewState extends ConsumerState<SplashView>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Shown instead of the guest/login decision when a returning user has
+/// Face ID/Touch ID sign-in enabled — their session is already valid, but
+/// they must pass a biometric check before landing on Home.
+class _BiometricUnlockPanel extends StatelessWidget {
+  const _BiometricUnlockPanel({
+    super.key,
+    required this.onUnlock,
+    required this.onUsePassword,
+  });
+
+  final VoidCallback onUnlock;
+  final VoidCallback onUsePassword;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('unlock-column'),
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        LiquidGlassButton(
+          label: 'Unlock with Face ID',
+          icon: Icons.face_retouching_natural,
+          height: 54,
+          onTap: onUnlock,
+        ),
+        const SizedBox(height: 10),
+        TextButton(
+          onPressed: onUsePassword,
+          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          child: const Text('Use Password Instead'),
+        ),
+      ],
     );
   }
 }

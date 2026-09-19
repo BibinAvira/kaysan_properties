@@ -27,7 +27,7 @@ import 'route_names.dart';
 /// everything else (Property Details, Search, Areas, Blogs, Contact, Legal)
 /// is pushed on top via ordinary [GoRoute]s so it covers the bottom nav.
 final GoRouter appRouter = GoRouter(
-  initialLocation: RouteNames.contact, // TEMP: dark-mode visual QA, reverting after
+  initialLocation: RouteNames.splash,
   errorBuilder: (BuildContext context, GoRouterState state) =>
       AppErrorView(message: 'Page not found: ${state.uri}'),
   routes: <RouteBase>[

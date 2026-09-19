@@ -81,15 +81,15 @@ class ContactActionsBar extends ConsumerWidget {
                 }
               },
             ),
-            // if (shareTitle != null && shareUrl != null) ...<Widget>[
-            //   const SizedBox(width: 10),
-            //   _ActionIconButton(
-            //     icon: Icons.share_outlined,
-            //     color: AppColors.textSecondaryLight,
-            //     label: 'Share',
-            //     onTap: () => LauncherUtils.shareProperty(title: shareTitle!, url: shareUrl!),
-            //   ),
-            // ],
+            if (shareTitle != null && shareUrl != null) ...<Widget>[
+              const SizedBox(width: 10),
+              _ActionIconButton(
+                icon: Icons.share_outlined,
+                color: AppColors.textSecondaryLight,
+                label: 'Share',
+                onTap: () => LauncherUtils.shareProperty(title: shareTitle!, url: shareUrl!),
+              ),
+            ],
           ],
         ),
       ),

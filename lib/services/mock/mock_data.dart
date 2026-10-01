@@ -1,9 +1,10 @@
 import '../../models/supporting_models.dart';
 
 /// In-memory dataset for the two content types that have no live endpoint
-/// yet: Blogs/Insights and client Testimonials. Projects, Areas and
-/// Developers are now served live from the x-opp microservice — see
-/// `services/projects_service.dart` and `AreaModel.fromProjects`.
+/// yet: Blogs/Insights and client Testimonials. Projects and Developers are
+/// now served live from the Reelly API — see `services/projects_service.dart`
+/// and `ProjectsRepository.getAllDevelopers`; Areas are still derived
+/// client-side from loaded projects — see `AreaModel.fromProjects`.
 class MockData {
   MockData._();
 

@@ -105,12 +105,12 @@ class _GuestFavoritesPrompt extends ConsumerWidget {
               const SizedBox(height: 18),
               const Text('Sign in to see your favorites',
                   style: TextStyle(
-                      color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700),
+                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(
                 'Create an account to save properties and pick up right where you left off.',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14, height: 1.4),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),

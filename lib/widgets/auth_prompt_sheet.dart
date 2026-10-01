@@ -67,8 +67,8 @@ class _AuthPromptSheet extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.w700,
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
@@ -76,7 +76,7 @@ class _AuthPromptSheet extends StatelessWidget {
               description,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.75),
-                fontSize: 14,
+                fontSize: 13,
                 height: 1.4,
               ),
             ),

@@ -109,12 +109,12 @@ class GlassAlertDialog extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
           DefaultTextStyle(
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.75), fontSize: 14, height: 1.4),
+                color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
             child: content,
           ),
           const SizedBox(height: 22),

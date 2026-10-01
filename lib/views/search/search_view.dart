@@ -52,8 +52,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
   @override
   Widget build(BuildContext context) {
-    final String query = ref.watch(projectFilterProvider.select((ProjectFilter f) => f.query));
-    final AsyncValue<List<ProjectModel>> results = ref.watch(filteredProjectsProvider);
+    final String query =
+        ref.watch(projectFilterProvider.select((ProjectFilter f) => f.query));
+    final AsyncValue<List<ProjectModel>> results =
+        ref.watch(filteredProjectsProvider);
     final AsyncValue<Set<int>> favorites = ref.watch(favoritesProvider);
 
     return Scaffold(
@@ -64,9 +66,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
           textInputAction: TextInputAction.search,
           decoration: const InputDecoration(
             border: InputBorder.none,
-            hintText: 'Find your dream off-plan property',
+            hintText: 'Find your dream property',
           ),
-          onChanged: (String v) => ref.read(projectFilterProvider.notifier).setQuery(v),
+          onChanged: (String v) =>
+              ref.read(projectFilterProvider.notifier).setQuery(v),
         ),
       ),
       body: query.trim().isEmpty
@@ -80,8 +83,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
                   spacing: 8,
                   runSpacing: 8,
                   children: _suggestions
-                      .map((String s) =>
-                          ActionChip(label: Text(s), onPressed: () => _setQuery(s)))
+                      .map((String s) => ActionChip(
+                          label: Text(s), onPressed: () => _setQuery(s)))
                       .toList(),
                 ),
               ],
@@ -98,11 +101,12 @@ class _SearchViewState extends ConsumerState<SearchView> {
                   return const EmptyStateView(
                     icon: Icons.search_off,
                     title: 'No properties found',
-                    message: 'Try a different project, area, or developer name.',
+                    message:
+                        'Try a different project, area, or developer name.',
                   );
                 }
-                final Set<int> favIds =
-                    favorites.maybeWhen(data: (Set<int> s) => s, orElse: () => <int>{});
+                final Set<int> favIds = favorites.maybeWhen(
+                    data: (Set<int> s) => s, orElse: () => <int>{});
                 return GridView.builder(
                   padding: const EdgeInsets.all(16),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -119,11 +123,13 @@ class _SearchViewState extends ConsumerState<SearchView> {
                       isFavorite: favIds.contains(project.id),
                       onFavoriteTap: () async {
                         if (await requireAuth(context, ref)) {
-                          ref.read(favoritesProvider.notifier).toggle(project.id);
+                          ref
+                              .read(favoritesProvider.notifier)
+                              .toggle(project.id);
                         }
                       },
-                      onTap: () =>
-                          context.push(RouteNames.propertyDetailsPath(project.id)),
+                      onTap: () => context
+                          .push(RouteNames.propertyDetailsPath(project.id)),
                     );
                   },
                 );

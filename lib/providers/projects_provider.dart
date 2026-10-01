@@ -88,11 +88,13 @@ class ProjectsController extends AsyncNotifier<ProjectsPageState> {
   /// have been fetched, as a safety cap against a search term that matches
   /// nothing anywhere in a ~1800-property catalog).
   ///
-  /// This exists because the X-OPP API has no free-text search of its own
-  /// (only `city`/`property_type`/`min_price`/`max_price`) — search and
-  /// most filtering only ever run client-side over whatever pages have
-  /// already been fetched, so without this, a real match sitting on page 5
-  /// looks identical to "no such property" if only page 1 has loaded.
+  /// Free-text search does have a reliable server-side param on this API
+  /// (`search=`, resolved against the entire catalog — see
+  /// [ProjectsRepository.searchProjects]), but district/developer/status
+  /// facet filters don't, so those still only ever run client-side over
+  /// whatever pages have already been fetched — without this, a real match
+  /// sitting on page 5 looks identical to "no such property" if only page
+  /// 1 has loaded.
   Future<void> loadUntilMatch(
     bool Function(List<ProjectModel> items) hasMatch, {
     int maxPages = 40,
@@ -173,4 +175,13 @@ final FutureProviderFamily<ProjectModel, int> projectDetailsProvider =
   // regardless of login state (see guest_session_provider.dart).
   ref.read(guestActivityProvider.notifier).recordViewed(id);
   return project;
+});
+
+/// All of one developer's projects for the Developer Details screen,
+/// keyed by the developer's `/developers` directory id — fetched with the
+/// API's server-side `developer` filter rather than by loading the whole
+/// catalog into [projectsProvider] and filtering it on-device.
+final FutureProviderFamily<List<ProjectModel>, int> developerProjectsProvider =
+    FutureProvider.family<List<ProjectModel>, int>((Ref ref, int developerId) {
+  return ref.watch(projectsRepositoryProvider).getProjectsByDeveloper(developerId);
 });

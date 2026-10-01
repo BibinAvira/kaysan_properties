@@ -69,12 +69,12 @@ class SignUpNudgeBanner extends ConsumerWidget {
                       children: <Widget>[
                         Text(
                           'Sign up to save favorites',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
                         ),
                         SizedBox(height: 2),
                         Text(
                           'Sync your saved properties and track enquiries.',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                       ],
                     ),

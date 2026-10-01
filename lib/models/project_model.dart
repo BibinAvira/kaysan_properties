@@ -24,10 +24,16 @@ class LocalizedText {
     );
   }
 
-  Map<String, dynamic> toJson() => <String, dynamic>{'en': en, 'ar': ar, 'fa': fa};
+  Map<String, dynamic> toJson() =>
+      <String, dynamic>{'en': en, 'ar': ar, 'fa': fa};
 }
 
 /// A simple `{id, name}` reference used for both `city` and `district`.
+/// Reelly's project `location` object gives these as plain display
+/// strings (no numeric id of their own attached to the project), so [id]
+/// is synthesized from the name — stable and unique enough for local
+/// grouping/equality checks (Areas, filter chips), just not a real
+/// server-side id.
 class NamedRef {
   const NamedRef({required this.id, required this.name});
 
@@ -36,16 +42,23 @@ class NamedRef {
 
   factory NamedRef.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const NamedRef(id: 0, name: LocalizedText());
-    return NamedRef(id: json['id'] as int? ?? 0, name: LocalizedText.fromJson(json['name']));
+    return NamedRef(
+        id: json['id'] as int? ?? 0,
+        name: LocalizedText.fromJson(json['name']));
   }
 
-  Map<String, dynamic> toJson() => <String, dynamic>{'id': id, 'name': name.toJson()};
+  Map<String, dynamic> toJson() =>
+      <String, dynamic>{'id': id, 'name': name.toJson()};
 }
 
-/// Developer partner. The list endpoint returns a rich object (logo,
-/// website, contact info, overview); the detail endpoint returns only
-/// `{id, name}`. [merge] lets the repository layer fill in the gaps from
-/// whichever copy has more data.
+/// Developer partner. Reelly's `/developers` directory returns the full
+/// profile (logo, website, contact info, description); a project only
+/// ever carries the developer's plain *name* string, so
+/// [ProjectsRepository] resolves the real [id]/[logo]/etc. by matching
+/// that name against a once-fetched, cached copy of the directory (see
+/// [ProjectsRepository.developerDirectory]). A project whose developer
+/// name doesn't match anything in the directory still gets a usable
+/// (if id-less) [DeveloperModel] via [DeveloperModel.placeholder].
 class DeveloperModel {
   const DeveloperModel({
     required this.id,
@@ -69,74 +82,50 @@ class DeveloperModel {
   final String address;
   final String? overview;
 
-  factory DeveloperModel.fromJson(Map<String, dynamic>? json) {
-    if (json == null) return const DeveloperModel(id: 0, name: 'Unknown Developer');
+  /// Used when a project's developer name has no match in the cached
+  /// `/developers` directory — [id] is synthesized from the name so
+  /// equality/grouping (Areas, Developer Details linking) still works,
+  /// just without a real server-side id to fetch more detail by.
+  factory DeveloperModel.placeholder(String name) {
+    final String display = name.isNotEmpty ? name : 'Unknown Developer';
+    return DeveloperModel(id: display.hashCode, name: display);
+  }
+
+  factory DeveloperModel.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic>? logo = json['logo'] as Map<String, dynamic>?;
     return DeveloperModel(
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? 'Unknown Developer',
-      slug: json['slug'] as String? ?? '',
-      logo: json['logo'] as String? ?? '',
+      slug: json['slug_name'] as String? ?? '',
+      logo: logo?['url'] as String? ?? '',
       website: json['website'] as String? ?? '',
       email: json['email'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
-      address: json['address'] as String? ?? '',
-      overview: json['overview'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-        'slug': slug,
-        'logo': logo,
-        'website': website,
-        'email': email,
-        'phone': phone,
-        'address': address,
-        'overview': overview,
-      };
-
-  /// Fills any blank field on this copy with a non-blank value from
-  /// [richer] — used when a slim detail-response developer is merged with
-  /// the fuller developer object already cached from the list response.
-  DeveloperModel mergeWith(DeveloperModel richer) {
-    return DeveloperModel(
-      id: id != 0 ? id : richer.id,
-      name: name.isNotEmpty && name != 'Unknown Developer' ? name : richer.name,
-      slug: slug.isNotEmpty ? slug : richer.slug,
-      logo: logo.isNotEmpty ? logo : richer.logo,
-      website: website.isNotEmpty ? website : richer.website,
-      email: email.isNotEmpty ? email : richer.email,
-      phone: phone.isNotEmpty ? phone : richer.phone,
-      address: address.isNotEmpty ? address : richer.address,
-      overview: overview ?? richer.overview,
+      address: '',
+      overview: json['description'] as String?,
     );
   }
 }
 
-/// "9+", "1", etc. — the API mixes numeric and string values here, so it's
-/// normalized to a display [value] string plus a localized unit [label].
+/// "9+", "1", etc. — a display-ready bedroom-count summary. Reelly gives
+/// this as a numeric `min_bedrooms`/`max_bedrooms` range rather than a
+/// single free-text label, so [display] is synthesized from that range
+/// (see [ProjectModel._subunitFromBedrooms]) instead of coming straight
+/// off the wire.
 class SubunitCount {
   const SubunitCount({required this.value, required this.label});
 
   final String value;
   final LocalizedText label;
 
-  factory SubunitCount.fromJson(Map<String, dynamic>? json) {
-    if (json == null) return const SubunitCount(value: '', label: LocalizedText());
-    return SubunitCount(
-      value: '${json['value']}',
-      label: LocalizedText.fromJson(json['label']),
-    );
-  }
-
-  String get display => label.display.isNotEmpty ? '$value ${label.display}' : value;
+  String get display =>
+      label.display.isNotEmpty ? '$value ${label.display}' : value;
 }
 
-/// One photo attached to a property. `type` was an unlabeled enum from the
-/// previous backend (kept so [ProjectModel.galleryImages]'s `type == 1`
-/// filter still works); the X-OPP API's flat `images` array has no such
-/// distinction, so every image built from it is tagged `1`.
+/// One photo attached to a property. `type` was an unlabeled enum from an
+/// earlier backend (kept so [ProjectModel.galleryImages]'s `type == 1`
+/// filter still works); every image gathered from Reelly's media fields is
+/// tagged `1`.
 class PropertyImageModel {
   const PropertyImageModel({required this.url, required this.type});
 
@@ -144,26 +133,20 @@ class PropertyImageModel {
   final int type;
 }
 
-/// A building facility/amenity (`{id, name}` only — no icon hint from the
-/// API, so the UI resolves an icon by keyword-matching the name).
+/// A building facility/amenity (`{id, name}` — Reelly also gives an icon
+/// image per amenity, not currently used since the UI resolves its own
+/// icon by keyword-matching the name).
 class FacilityModel {
   const FacilityModel({required this.id, required this.name});
 
   final int id;
   final LocalizedText name;
-
-  factory FacilityModel.fromJson(Map<String, dynamic> json) {
-    return FacilityModel(id: json['id'] as int? ?? 0, name: LocalizedText.fromJson(json['name']));
-  }
 }
 
-/// A summarized unit typology within the project, e.g. "Apartment / 2
-/// bedrooms starting at AED 4.7M" — this is the closest equivalent to a
-/// traditional "floor plan" card. The X-OPP API has no per-type price/area
-/// breakdown to build this from (only an overall bedroom/price/area range
-/// per project), so [ProjectModel.groupedApartments] is currently always
-/// empty; this class and its `fromJson` are kept in case a future catalog
-/// or endpoint restores that data.
+/// A summarized unit typology within the project, e.g. "Studio starting at
+/// AED 1.4M" — built from Reelly's `typical_units[]` (bedroom count + price
+////size range per typology), the closest equivalent to a traditional
+/// "floor plan" card.
 class GroupedApartmentModel {
   const GroupedApartmentModel({
     required this.id,
@@ -179,16 +162,6 @@ class GroupedApartmentModel {
   final double minPrice;
   final double minArea;
 
-  factory GroupedApartmentModel.fromJson(Map<String, dynamic> json) {
-    return GroupedApartmentModel(
-      id: json['id'] as int? ?? 0,
-      unitType: LocalizedText.fromJson(json['unit_type']),
-      rooms: LocalizedText.fromJson(json['rooms']),
-      minPrice: (json['min_price'] as num?)?.toDouble() ?? 0,
-      minArea: (json['min_area'] as num?)?.toDouble() ?? 0,
-    );
-  }
-
   String get title {
     final String roomsDisplay = rooms.display;
     final String type = unitType.display;
@@ -198,7 +171,9 @@ class GroupedApartmentModel {
 }
 
 /// A single, individually listed unit for sale within the project, sourced
-/// from the `/properties/{id}/units/` endpoint.
+/// from `/projects/{id}/units` — an Enterprise-tier-gated Reelly endpoint,
+/// so [ProjectsRepository.getById] treats a failure here as "no unit-level
+/// data available" rather than a hard error.
 class PropertyUnitModel {
   const PropertyUnitModel({
     required this.id,
@@ -219,71 +194,51 @@ class PropertyUnitModel {
   final String? floorPlanImage;
   final String status;
 
-  /// The unit's type/bedroom count, e.g. "Studio", "2" — the API's
-  /// `bedroom_label`. Shown as the unit's "type" in the units list.
+  /// The unit's type/bedroom count, e.g. "Studio", "2" — shown as the
+  /// unit's "type" in the units list.
   final String bedroomLabel;
 
   factory PropertyUnitModel.fromJson(Map<String, dynamic> json) {
+    final num? bedrooms = json['bedrooms'] as num?;
     return PropertyUnitModel(
       id: json['id'] as int? ?? 0,
-      aptNo: json['unit_no'] as String? ?? '—',
+      aptNo: json['unit_number'] as String? ?? json['name'] as String? ?? '—',
       area: (json['area'] as num?)?.toDouble(),
       price: (json['price'] as num?)?.toDouble(),
-      // The API's floor is free text (e.g. "G", "12") rather than a
-      // guaranteed integer, so a non-numeric floor just leaves this null.
-      floorNo: int.tryParse('${json['floor_no'] ?? ''}'),
-      floorPlanImage: json['floor_plan_image'] as String?,
+      floorNo: int.tryParse('${json['floor'] ?? ''}'),
+      floorPlanImage:
+          (json['layout'] as Map<String, dynamic>?)?['url'] as String?,
       status: json['status'] as String? ?? '',
-      bedroomLabel: json['bedroom_label'] as String? ?? '',
+      bedroomLabel: bedrooms == null
+          ? ''
+          : (bedrooms == 0 ? 'Studio' : '$bedrooms'),
     );
   }
 }
 
-/// One line item within a payment plan, e.g. "On Booking & 1st Payment —
-/// 10%".
+/// One line item within a payment plan, e.g. "On Booking — 10%".
 class PaymentPlanValueModel {
   const PaymentPlanValueModel({required this.name, required this.value});
 
   final String name;
   final String value;
-
-  factory PaymentPlanValueModel.fromJson(Map<String, dynamic> json) {
-    return PaymentPlanValueModel(
-      name: json['name'] as String? ?? '',
-      value: json['value'] as String? ?? '',
-    );
-  }
 }
 
-/// A payment plan option, e.g. "60/40", with its milestone breakdown.
-///
-/// The X-OPP API gives each plan as `{name, down_payment_pct,
-/// during_construction_pct, on_handover_pct, post_delivery_payment}` rather
-/// than free-text milestone lines, so [ProjectModel.fromDetailJson]
-/// synthesizes [values] from those percentages and uses
-/// [post_delivery_payment] to fill [description] with a "Post-Handover"
-/// tag — everything else about this class (and the card that renders it)
-/// is unchanged.
+/// A payment plan option with its milestone breakdown, built from Reelly's
+/// `payment_plans[].steps[]` (each step: `{name, percentage}`).
+/// [description] carries a "Post-Handover" tag when the plan extends past
+/// handover ([PaymentPlanModel._isPostHandover]).
 class PaymentPlanModel {
-  const PaymentPlanModel({required this.name, required this.description, required this.values});
+  const PaymentPlanModel(
+      {required this.name, required this.description, required this.values});
 
   final LocalizedText name;
   final LocalizedText description;
   final List<PaymentPlanValueModel> values;
-
-  factory PaymentPlanModel.fromJson(Map<String, dynamic> json) {
-    return PaymentPlanModel(
-      name: LocalizedText.fromJson(json['name']),
-      description: LocalizedText.fromJson(json['description']),
-      values: (json['values'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => PaymentPlanValueModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
-  }
 }
 
-/// A property/project. The list endpoint (`/properties/`) populates the
-/// "summary" fields; the detail endpoint (`/properties/{id}/`) additionally
+/// A property/project. The list endpoint (`/projects`) populates the
+/// "summary" fields; the detail endpoint (`/projects/{id}`) additionally
 /// populates the "detail" fields (nullable/empty by default). Use
 /// [mergeDetail] to combine a cached list-summary with a freshly fetched
 /// detail record so nothing already known gets lost, and [withPropertyUnits]
@@ -299,12 +254,14 @@ class ProjectModel {
     required this.deliveryDateLabel,
     required this.minArea,
     required this.lowPrice,
+    this.highPrice = 0,
     required this.propertyTypeCode,
     required this.propertyType,
     required this.propertyStatusCode,
     required this.salesStatusCode,
     required this.city,
     required this.district,
+    this.countryId,
     required this.developer,
     required this.subunitCount,
     this.updatedAt,
@@ -330,23 +287,31 @@ class ProjectModel {
   final int id;
   final LocalizedText title;
   final String cover;
-  final String address; // "lat,lng" built from the API's latitude/longitude
-  final String addressText; // no longer supplied by the API; always ''
-  final int deliveryDate; // YYYYMM best-effort parsed from deliveryDateLabel
-  final String deliveryDateLabel; // API's free-text delivery_date, e.g. "Q4 2027"
+  final String address; // "lat,lng" built from location.latitude/longitude
+  final String addressText; // not supplied by the API; always ''
+  final int deliveryDate; // YYYYMM parsed from completion_datetime
+  final String deliveryDateLabel; // API's free-text completion_date, e.g. "DEC 2024"
   final double minArea;
   final double lowPrice;
+
+  /// Reelly's `max_price` — the most expensive unit; 0 when unknown. With
+  /// [lowPrice] it gives the project's price span, which the price filter
+  /// matches by overlap (see [ProjectsRepository.applyFilter]).
+  final double highPrice;
   final int propertyTypeCode;
-  final String propertyType; // raw API string, e.g. "Apartment, Villa"
+  final String propertyType; // joined available_unit_types_display, e.g. "Apartment, Villa"
   final int propertyStatusCode; // 1 = Ready, 2 = Off-Plan (see propertyStatusLabel)
   final int salesStatusCode;
   final NamedRef city;
   final NamedRef district;
+
+  /// Reelly's `location.country` id (219 = UAE); null when missing.
+  final int? countryId;
   final DeveloperModel developer;
   final SubunitCount subunitCount;
   final DateTime? updatedAt;
 
-  /// Populated directly from the API's `sales_status_name` string.
+  /// Populated directly from the API's `sale_status_display` string.
   final LocalizedText? salesStatusLabel;
 
   final LocalizedText? description;
@@ -395,9 +360,9 @@ class ProjectModel {
     return (double.tryParse(parts[0].trim()), double.tryParse(parts[1].trim()));
   }
 
-  /// Converts the best-effort-parsed `YYYYMM` [deliveryDate] into a real
-  /// [DateTime] (day fixed to the 1st, since no day is given). Returns null
-  /// for unparsable/zero values — callers should fall back to
+  /// Converts the parsed `YYYYMM` [deliveryDate] into a real [DateTime]
+  /// (day fixed to the 1st, since no day is given). Returns null for
+  /// unparsable/zero values — callers should fall back to
   /// [deliveryDateLabel] (the API's original free-text string) rather than
   /// [propertyStatusLabel] where possible, since it carries more info.
   DateTime? get handoverDate {
@@ -408,9 +373,7 @@ class ProjectModel {
     return DateTime(year, month, 1);
   }
 
-  /// "Ready" / "Off-Plan" — derived from the API's `property_status_name`
-  /// ("Ready" / "Off Plan"). Falls back to a generic label if that string
-  /// is missing or unrecognized.
+  /// "Ready" / "Off-Plan" — derived from [propertyStatusCode].
   String get propertyStatusLabel {
     switch (propertyStatusCode) {
       case 1:
@@ -422,9 +385,9 @@ class ProjectModel {
     }
   }
 
-  /// Sales-status label, straight from the API's `sales_status_name`
-  /// (e.g. "On Sale", "Sold Out"), falling back to a non-committal default
-  /// only if that string was missing.
+  /// Sales-status label, straight from the API's `sale_status_display`
+  /// (e.g. "On Sale", "Out of Stock"), falling back to a non-committal
+  /// default only if that string was missing.
   String get salesStatusDisplay {
     if (salesStatusLabel != null && salesStatusLabel!.display.isNotEmpty) {
       return salesStatusLabel!.display;
@@ -434,33 +397,73 @@ class ProjectModel {
 
   /// Main gallery images (`type == 1`), falling back to just [cover] if
   /// no gallery photos are present (e.g. on a not-yet-detail-loaded card).
+  ///
+  /// [cover] — the same image shown as the property card's thumbnail — is
+  /// always pinned first so the detail page's gallery opens on the photo
+  /// the user already saw on the card, rather than whatever order the API
+  /// happened to return the `type == 1` images in.
   List<String> get galleryImages {
     final List<String> gallery = propertyImages
         .where((PropertyImageModel img) => img.type == 1 && img.url.isNotEmpty)
         .map((PropertyImageModel img) => img.url)
         .toList();
-    return gallery.isNotEmpty ? gallery : (cover.isNotEmpty ? <String>[cover] : <String>[]);
+    if (gallery.isEmpty) {
+      return cover.isNotEmpty ? <String>[cover] : <String>[];
+    }
+    if (cover.isNotEmpty) {
+      gallery.remove(cover);
+      gallery.insert(0, cover);
+    }
+    return gallery;
   }
 
   /// Orders by [deliveryDate] ascending (soonest handover first), with
   /// projects that have no parseable handover date (0 — typically an
-  /// already-`Ready` property, or an Off-Plan one with an unrecognized
-  /// date format) pushed to the end rather than sorting first, which a
-  /// naive ascending-int compare would otherwise do since 0 is the
-  /// smallest possible value.
+  /// already-`Ready` property) pushed to the end rather than sorting
+  /// first, which a naive ascending-int compare would otherwise do since
+  /// 0 is the smallest possible value.
   static int compareHandoverSoonest(ProjectModel a, ProjectModel b) {
     final int keyA = a.deliveryDate == 0 ? 999999 : a.deliveryDate;
     final int keyB = b.deliveryDate == 0 ? 999999 : b.deliveryDate;
     return keyA.compareTo(keyB);
   }
 
-  /// Maps the API's free-text `property_status_name` onto the 1/Ready,
-  /// 2/Off-Plan codes the rest of the app already filters/displays by.
-  static int _statusCodeFromName(String? name) {
-    final String n = (name ?? '').toLowerCase();
-    if (n.contains('ready')) return 1;
-    if (n.contains('off')) return 2;
-    return 0;
+  /// [value] if it is a string, else null — for API fields whose type
+  /// isn't reliable.
+  static String? _text(Object? value) => value is String ? value : null;
+
+  static NamedRef _namedRef(String? name) {
+    final String display = name ?? '';
+    return NamedRef(id: display.hashCode, name: LocalizedText(en: display));
+  }
+
+  /// Synthesizes a bedroom-range display string ("Studio", "2", "1-3")
+  /// from Reelly's numeric `min_bedrooms`/`max_bedrooms` — there's no
+  /// single free-text bedroom label on this API the way the previous
+  /// backend provided one.
+  static SubunitCount _subunitFromBedrooms(num? min, num? max) {
+    String label(num n) => n == 0 ? 'Studio' : '${n.toInt()}';
+    if (min == null && max == null) {
+      return const SubunitCount(value: '', label: LocalizedText());
+    }
+    final num lo = min ?? max!;
+    final num hi = max ?? min!;
+    final String value = lo == hi ? label(lo) : '${label(lo)}-${label(hi)}';
+    return SubunitCount(value: value, label: const LocalizedText());
+  }
+
+  /// Best-effort turns the API's ISO `completion_datetime` into a sortable
+  /// `YYYYMM` int, so handovers compare by month (Home's Off-Plan pick uses
+  /// [compareHandoverSoonest]). Falls
+  /// back to parsing the free-text `completion_date` label (e.g. "Q4
+  /// 2027", "DEC 2024") for the rare record missing the ISO field.
+  /// Returns 0 (unsortable/unset) for anything unparseable — e.g. an
+  /// already-`Ready` project with no future completion date.
+  static int _parseDeliveryDate(String? isoDateTime, String? label) {
+    final DateTime? iso =
+        isoDateTime == null ? null : DateTime.tryParse(isoDateTime);
+    if (iso != null) return iso.year * 100 + iso.month;
+    return _parseLabel(label);
   }
 
   static const Map<String, int> _monthNames = <String, int>{
@@ -478,50 +481,14 @@ class ProjectModel {
     'dec': 12, 'december': 12,
   };
 
-  /// The catalog's earliest plausible real handover year. Below this, a
-  /// parsed date is treated as unsortable/unset rather than real — see
-  /// [_parseDeliveryDate]'s doc comment for why this matters.
   static const int _earliestPlausibleYear = 2000;
 
-  /// Best-effort turns a free-text delivery date into a sortable `YYYYMM`
-  /// int, so [ProjectSort.handoverSoonest] keeps working. The live catalog
-  /// sends a mix of formats — a plain `"YYYYMM"` code (e.g. `"202609"`),
-  /// `"Q4 2027"`, a month name (`"December 2027"`, `"june 2029"`), a full
-  /// date (`"2028-09-30"`), or an empty string for a `Ready` property —
-  /// far more variety than the integration doc's single example suggests.
-  ///
-  /// A number of entries also send the literal string `"197001"` — an
-  /// upstream data artifact (almost certainly an unset/zero timestamp on
-  /// their side rendered as "Jan 1970") rather than a real handover date.
-  /// No genuine off-plan or ready property predates [_earliestPlausibleYear],
-  /// so any parse landing before it is treated the same as "no date" —
-  /// this is what fixes handover dates showing as 1970 in the app.
-  ///
-  /// Returns 0 (unsortable/unset) for anything unparseable or implausible.
-  static int _parseDeliveryDate(String? label) {
+  static int _parseLabel(String? label) {
     if (label == null || label.isEmpty) return 0;
 
-    final RegExpMatch? yyyymm = RegExp(r'^(\d{4})(\d{2})$').firstMatch(label);
-    if (yyyymm != null) {
-      final int year = int.parse(yyyymm.group(1)!);
-      final int month = int.parse(yyyymm.group(2)!);
-      if (month >= 1 && month <= 12 && year >= _earliestPlausibleYear) {
-        return year * 100 + month;
-      }
-      return 0;
-    }
-
-    final RegExpMatch? isoDate = RegExp(r'^(\d{4})[-/](\d{1,2})[-/]\d{1,2}$').firstMatch(label);
-    if (isoDate != null) {
-      final int year = int.parse(isoDate.group(1)!);
-      final int month = int.parse(isoDate.group(2)!);
-      if (month >= 1 && month <= 12 && year >= _earliestPlausibleYear) {
-        return year * 100 + month;
-      }
-      return 0;
-    }
-
-    final RegExpMatch? quarter = RegExp(r'Q\s*([1-4]).*?(\d{4})', caseSensitive: false).firstMatch(label);
+    final RegExpMatch? quarter =
+        RegExp(r'Q\s*([1-4]).*?(\d{4})', caseSensitive: false)
+            .firstMatch(label);
     if (quarter != null) {
       final int q = int.parse(quarter.group(1)!);
       final int year = int.parse(quarter.group(2)!);
@@ -530,7 +497,8 @@ class ProjectModel {
     }
 
     final RegExpMatch? monthName =
-        RegExp(r'([A-Za-z]+)\D{0,4}(\d{4})', caseSensitive: false).firstMatch(label);
+        RegExp(r'([A-Za-z]+)\D{0,4}(\d{4})', caseSensitive: false)
+            .firstMatch(label);
     if (monthName != null) {
       final int? month = _monthNames[monthName.group(1)!.toLowerCase()];
       final int year = int.parse(monthName.group(2)!);
@@ -548,136 +516,167 @@ class ProjectModel {
     return 0;
   }
 
-  /// True if [label] contains a 4-digit year token older than
-  /// [_earliestPlausibleYear] — used to blank out known sentinel garbage
-  /// (e.g. `"197001"`) from the *displayed* fallback label too, not just
-  /// the sortable [deliveryDate] int, so a raw meaningless string like
-  /// "197001" never reaches the screen even as plain text.
-  static bool _looksLikeSentinelYear(String label) {
-    final RegExpMatch? anyYear = RegExp(r'(\d{4})').firstMatch(label);
-    if (anyYear == null) return false;
-    return int.parse(anyYear.group(1)!) < _earliestPlausibleYear;
-  }
+  static List<PropertyImageModel> _urls(Iterable<String> urls) => urls
+      .where((String u) => u.isNotEmpty)
+      .map((String u) => PropertyImageModel(url: u, type: 1))
+      .toList();
 
-  /// The API's raw `delivery_date` with known sentinel garbage (see
-  /// [_looksLikeSentinelYear]) blanked out, so [deliveryDateLabel] never
-  /// shows something meaningless like "197001" even as a last-resort
-  /// fallback string.
-  static String _cleanDeliveryDateLabel(String raw) => _looksLikeSentinelYear(raw) ? '' : raw;
+  static String? _mediaUrl(dynamic media) =>
+      (media as Map<String, dynamic>?)?['url'] as String?;
 
-  static NamedRef _namedRef(String? name) {
-    final String display = name ?? '';
-    return NamedRef(id: display.hashCode, name: LocalizedText(en: display));
-  }
+  static List<String> _mediaListUrls(dynamic list) => (list as List<dynamic>? ?? <dynamic>[])
+      .map((dynamic e) => _mediaUrl(e) ?? '')
+      .where((String u) => u.isNotEmpty)
+      .toList();
 
-  static DeveloperModel _developer(String? name) {
-    final String display = (name != null && name.isNotEmpty) ? name : 'Unknown Developer';
-    return DeveloperModel(id: display.hashCode, name: display);
-  }
+  /// Fields present on both the list (`/projects`) and detail
+  /// (`/projects/{id}`) responses. [developers] is the cached
+  /// name→[DeveloperModel] directory from [ProjectsRepository] — passed in
+  /// so every project can resolve a real developer id/logo instead of a
+  /// name-only placeholder; omitted (or a miss) falls back to
+  /// [DeveloperModel.placeholder].
+  static ProjectModel _fromCommonJson(
+    Map<String, dynamic> json, {
+    Map<String, DeveloperModel>? developers,
+    List<PropertyImageModel> propertyImages = const <PropertyImageModel>[],
+    int? completionRate,
+    List<FacilityModel> facilities = const <FacilityModel>[],
+    List<GroupedApartmentModel> groupedApartments = const <GroupedApartmentModel>[],
+    List<PaymentPlanModel> paymentPlans = const <PaymentPlanModel>[],
+  }) {
+    final Map<String, dynamic>? location =
+        json['location'] as Map<String, dynamic>?;
+    final double? lat = (location?['latitude'] as num?)?.toDouble();
+    final double? lng = (location?['longitude'] as num?)?.toDouble();
+    final String deliveryDateLabel = json['completion_date'] as String? ?? '';
+    final String developerName = json['developer'] as String? ?? '';
+    final List<String> unitTypes =
+        (json['available_unit_types_display'] as List<dynamic>? ?? <dynamic>[])
+            .map((dynamic e) => '$e')
+            .toList();
 
-  static List<PropertyImageModel> _images(Map<String, dynamic> json) {
-    return (json['images'] as List<dynamic>? ?? <dynamic>[])
-        .map((dynamic e) => PropertyImageModel(url: e as String? ?? '', type: 1))
-        .where((PropertyImageModel img) => img.url.isNotEmpty)
-        .toList();
-  }
-
-  factory ProjectModel.fromListJson(Map<String, dynamic> json) {
-    final String deliveryDateLabel = _cleanDeliveryDateLabel(json['delivery_date'] as String? ?? '');
     return ProjectModel(
       id: json['id'] as int,
-      title: LocalizedText.fromJson(json['title']),
-      cover: json['cover'] as String? ?? '',
-      address: json['latitude'] != null && json['longitude'] != null
-          ? '${json['latitude']},${json['longitude']}'
-          : '',
+      title: LocalizedText(en: json['name'] as String? ?? ''),
+      cover: _mediaUrl(json['cover_image']) ?? '',
+      address: lat != null && lng != null ? '$lat,$lng' : '',
       addressText: '',
-      deliveryDate: _parseDeliveryDate(deliveryDateLabel),
+      deliveryDate:
+          _parseDeliveryDate(json['completion_datetime'] as String?, deliveryDateLabel),
       deliveryDateLabel: deliveryDateLabel,
-      minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
-      lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
+      minArea: (json['min_size'] as num?)?.toDouble() ?? 0,
+      lowPrice: (json['min_price'] as num?)?.toDouble() ?? 0,
+      highPrice: (json['max_price'] as num?)?.toDouble() ?? 0,
       propertyTypeCode: 0,
-      propertyType: json['property_type'] as String? ?? '',
-      propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
+      propertyType: unitTypes.join(', '),
+      propertyStatusCode: json['construction_status'] == 'completed' ? 1 : 2,
       salesStatusCode: 0,
-      salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
-      city: _namedRef(json['city'] as String?),
-      district: _namedRef(json['district'] as String?),
-      developer: _developer(json['developer_name'] as String?),
-      subunitCount: SubunitCount(value: json['bedroom_labels'] as String? ?? '', label: const LocalizedText()),
-      updatedAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
-      description: LocalizedText.fromJson(json['description']),
-      completionRate: json['completion_rate'] as int?,
-      rentalGuarantee: json['has_rental_guarantee'] as bool?,
-      rentalGuaranteeValue: (json['rental_guarantee_pct'] as num?)?.toDouble(),
-      propertyImages: _images(json),
+      salesStatusLabel: LocalizedText.fromJson(json['sale_status_display']),
+      // Reelly sometimes sends `city` as a numeric id rather than a name
+      // (seen when `region` is empty), so these are read leniently.
+      city: _namedRef((_text(location?['region'])?.isNotEmpty ?? false)
+          ? _text(location!['region'])
+          : _text(location?['city'])),
+      district: _namedRef(_text(location?['district'])),
+      countryId: location?['country'] is int ? location!['country'] as int : null,
+      developer: developers?[developerName] ??
+          DeveloperModel.placeholder(developerName),
+      subunitCount: _subunitFromBedrooms(
+          json['min_bedrooms'] as num?, json['max_bedrooms'] as num?),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'] as String)
+          : null,
+      description: LocalizedText(
+          en: json['overview'] as String? ??
+              json['short_description'] as String? ??
+              ''),
+      completionRate: completionRate,
+      residentialUnits: json['units_count'] as int?,
+      propertyImages: propertyImages,
+      facilities: facilities,
+      groupedApartments: groupedApartments,
+      paymentPlans: paymentPlans,
     );
   }
 
-  factory ProjectModel.fromDetailJson(Map<String, dynamic> json) {
-    final String deliveryDateLabel = _cleanDeliveryDateLabel(json['delivery_date'] as String? ?? '');
-    return ProjectModel(
-      id: json['id'] as int,
-      title: LocalizedText.fromJson(json['title']),
-      cover: json['cover'] as String? ?? '',
-      address: json['latitude'] != null && json['longitude'] != null
-          ? '${json['latitude']},${json['longitude']}'
-          : '',
-      addressText: '',
-      deliveryDate: _parseDeliveryDate(deliveryDateLabel),
-      deliveryDateLabel: deliveryDateLabel,
-      minArea: (json['area_from'] as num?)?.toDouble() ?? 0,
-      lowPrice: (json['price_from'] as num?)?.toDouble() ?? 0,
-      propertyTypeCode: 0,
-      propertyType: json['property_type'] as String? ?? '',
-      propertyStatusCode: _statusCodeFromName(json['property_status_name'] as String?),
-      salesStatusCode: 0,
-      salesStatusLabel: LocalizedText.fromJson(json['sales_status_name']),
-      city: _namedRef(json['city'] as String?),
-      district: _namedRef(json['district'] as String?),
-      developer: _developer(json['developer_name'] as String?),
-      subunitCount: SubunitCount(value: json['bedroom_labels'] as String? ?? '', label: const LocalizedText()),
-      updatedAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
-      description: LocalizedText.fromJson(json['description']),
-      completionRate: json['completion_rate'] as int?,
-      rentalGuarantee: json['has_rental_guarantee'] as bool?,
-      rentalGuaranteeValue: (json['rental_guarantee_pct'] as num?)?.toDouble(),
-      propertyImages: _images(json),
-      downPayment: (json['down_payment_pct'] as num?)?.toDouble(),
-      residentialUnits: json['residential_units'] as int?,
-      commercialUnits: json['commercial_units'] as int?,
-      paymentMinimumDownPayment: json['down_payment_amount'] as int?,
-      postDelivery: json['post_delivery_payment'] as bool?,
-      facilities: (json['amenities'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic e) => FacilityModel(id: (e as String).hashCode, name: LocalizedText(en: e)))
+  factory ProjectModel.fromListJson(
+    Map<String, dynamic> json, {
+    Map<String, DeveloperModel>? developers,
+  }) {
+    return _fromCommonJson(json, developers: developers);
+  }
+
+  factory ProjectModel.fromDetailJson(
+    Map<String, dynamic> json, {
+    Map<String, DeveloperModel>? developers,
+  }) {
+    return _fromCommonJson(
+      json,
+      developers: developers,
+      propertyImages: _urls(<String>[
+        ..._mediaListUrls(json['interior']),
+        ..._mediaListUrls(json['lobby']),
+        ..._mediaListUrls(json['architecture']),
+      ]).map((PropertyImageModel i) => i.url).toSet().map(
+          (String url) => PropertyImageModel(url: url, type: 1)).toList(),
+      completionRate: (json['readiness_progress'] as num?)?.round(),
+      facilities: (json['project_amenities'] as List<dynamic>? ?? <dynamic>[])
+          .map((dynamic e) => _amenityFromJson(e as Map<String, dynamic>))
           .toList(),
-      // No per-unit-type price/area breakdown in this API — see
-      // GroupedApartmentModel's doc comment. Individual units still come
-      // from the separate /units/ endpoint via [withPropertyUnits].
-      groupedApartments: const <GroupedApartmentModel>[],
+      groupedApartments:
+          (json['typical_units'] as List<dynamic>? ?? <dynamic>[])
+              .toList()
+              .asMap()
+              .entries
+              .map((MapEntry<int, dynamic> e) =>
+                  _typicalUnitFromJson(e.key, e.value as Map<String, dynamic>))
+              .toList(),
       paymentPlans: (json['payment_plans'] as List<dynamic>? ?? <dynamic>[])
           .map((dynamic e) => _paymentPlanFromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
 
-  /// Builds a [PaymentPlanModel] from the API's `{name, down_payment_pct,
-  /// during_construction_pct, on_handover_pct, post_delivery_payment}`
-  /// shape — see that class's doc comment for why this isn't a plain
-  /// `fromJson` on it.
-  static PaymentPlanModel _paymentPlanFromJson(Map<String, dynamic> json) {
-    final List<PaymentPlanValueModel> values = <PaymentPlanValueModel>[];
-    void addPct(String label, dynamic pct) {
-      if (pct != null) values.add(PaymentPlanValueModel(name: label, value: '$pct%'));
-    }
+  static FacilityModel _amenityFromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic>? amenity =
+        json['amenity'] as Map<String, dynamic>?;
+    return FacilityModel(
+      id: json['id'] as int? ?? 0,
+      name: LocalizedText(en: amenity?['name'] as String? ?? ''),
+    );
+  }
 
-    addPct('Down Payment', json['down_payment_pct']);
-    addPct('During Construction', json['during_construction_pct']);
-    addPct('On Handover', json['on_handover_pct']);
+  static GroupedApartmentModel _typicalUnitFromJson(
+      int index, Map<String, dynamic> json) {
+    final num bedrooms = json['bedrooms'] as num? ?? 0;
+    final String roomsDisplay = bedrooms == 0 ? '' : '${bedrooms.toInt()}';
+    return GroupedApartmentModel(
+      id: index,
+      unitType: LocalizedText(en: bedrooms == 0 ? 'Studio' : 'Apartment'),
+      rooms: LocalizedText(en: roomsDisplay),
+      minPrice: (json['from_price_aed'] as num?)?.toDouble() ?? 0,
+      minArea: (json['from_size_sqft'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  /// Builds a [PaymentPlanModel] from Reelly's `{name, is_handover,
+  /// months_after_handover, steps: [{name, percentage}]}` shape.
+  static PaymentPlanModel _paymentPlanFromJson(Map<String, dynamic> json) {
+    final List<dynamic> steps = json['steps'] as List<dynamic>? ?? <dynamic>[];
+    final List<PaymentPlanValueModel> values = steps
+        .map((dynamic e) => e as Map<String, dynamic>)
+        .map((Map<String, dynamic> step) => PaymentPlanValueModel(
+              name: step['name'] as String? ?? '',
+              value: '${step['percentage'] ?? 0}%',
+            ))
+        .toList();
+
+    final bool isPostHandover = (json['is_handover'] as bool? ?? false) ||
+        ((json['months_after_handover'] as num?) ?? 0) > 0;
 
     return PaymentPlanModel(
       name: LocalizedText(en: json['name'] as String? ?? 'Payment Plan'),
-      description: (json['post_delivery_payment'] as bool? ?? false)
+      description: isPostHandover
           ? const LocalizedText(en: 'Post-Handover')
           : const LocalizedText(),
       values: values,
@@ -693,26 +692,37 @@ class ProjectModel {
       title: detail.title,
       cover: detail.cover.isNotEmpty ? detail.cover : cover,
       address: detail.address.isNotEmpty ? detail.address : address,
-      addressText: detail.addressText.isNotEmpty ? detail.addressText : addressText,
-      deliveryDate: detail.deliveryDate != 0 ? detail.deliveryDate : deliveryDate,
-      deliveryDateLabel: detail.deliveryDateLabel.isNotEmpty ? detail.deliveryDateLabel : deliveryDateLabel,
+      addressText:
+          detail.addressText.isNotEmpty ? detail.addressText : addressText,
+      deliveryDate:
+          detail.deliveryDate != 0 ? detail.deliveryDate : deliveryDate,
+      deliveryDateLabel: detail.deliveryDateLabel.isNotEmpty
+          ? detail.deliveryDateLabel
+          : deliveryDateLabel,
       minArea: detail.minArea != 0 ? detail.minArea : minArea,
       lowPrice: detail.lowPrice != 0 ? detail.lowPrice : lowPrice,
+      highPrice: detail.highPrice != 0 ? detail.highPrice : highPrice,
       propertyTypeCode: detail.propertyTypeCode,
-      propertyType: detail.propertyType.isNotEmpty ? detail.propertyType : propertyType,
+      propertyType:
+          detail.propertyType.isNotEmpty ? detail.propertyType : propertyType,
       propertyStatusCode: detail.propertyStatusCode,
       salesStatusCode: detail.salesStatusCode,
       salesStatusLabel: detail.salesStatusLabel ?? salesStatusLabel,
       city: detail.city.id != 0 ? detail.city : city,
       district: detail.district.id != 0 ? detail.district : district,
-      developer: detail.developer.mergeWith(developer),
-      subunitCount: detail.subunitCount.display.isNotEmpty ? detail.subunitCount : subunitCount,
+      countryId: detail.countryId ?? countryId,
+      developer: detail.developer.id != 0 ? detail.developer : developer,
+      subunitCount: detail.subunitCount.display.isNotEmpty
+          ? detail.subunitCount
+          : subunitCount,
       updatedAt: detail.updatedAt ?? updatedAt,
       description: detail.description ?? description,
       completionRate: detail.completionRate ?? completionRate,
       rentalGuarantee: detail.rentalGuarantee ?? rentalGuarantee,
       rentalGuaranteeValue: detail.rentalGuaranteeValue ?? rentalGuaranteeValue,
-      propertyImages: detail.propertyImages.isNotEmpty ? detail.propertyImages : propertyImages,
+      propertyImages: detail.propertyImages.isNotEmpty
+          ? detail.propertyImages
+          : propertyImages,
       downPayment: detail.downPayment,
       residentialUnits: detail.residentialUnits,
       commercialUnits: detail.commercialUnits,
@@ -721,11 +731,13 @@ class ProjectModel {
       facilities: detail.facilities,
       groupedApartments: detail.groupedApartments,
       paymentPlans: detail.paymentPlans,
-      propertyUnits: detail.propertyUnits.isNotEmpty ? detail.propertyUnits : propertyUnits,
+      propertyUnits: detail.propertyUnits.isNotEmpty
+          ? detail.propertyUnits
+          : propertyUnits,
     );
   }
 
-  /// Attaches units fetched from the separate `/properties/{id}/units/`
+  /// Attaches units fetched from the separate `/projects/{id}/units`
   /// endpoint (see [ProjectsRepository.getById]) — everything else about
   /// the record is left as-is.
   ProjectModel withPropertyUnits(List<PropertyUnitModel> units) {
@@ -739,6 +751,7 @@ class ProjectModel {
       deliveryDateLabel: deliveryDateLabel,
       minArea: minArea,
       lowPrice: lowPrice,
+      highPrice: highPrice,
       propertyTypeCode: propertyTypeCode,
       propertyType: propertyType,
       propertyStatusCode: propertyStatusCode,
@@ -746,6 +759,7 @@ class ProjectModel {
       salesStatusLabel: salesStatusLabel,
       city: city,
       district: district,
+      countryId: countryId,
       developer: developer,
       subunitCount: subunitCount,
       updatedAt: updatedAt,

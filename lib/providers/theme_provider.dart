@@ -11,17 +11,16 @@ class ThemeModeController extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
     _restore();
-    return ThemeMode.dark; // TEMP: dark-mode visual QA, reverting after
+    // Always light unless the user picked dark in the app's own settings —
+    // never the phone's system theme (ThemeMode.system is never used).
+    return ThemeMode.light;
   }
 
   Future<void> _restore() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? saved = prefs.getString(_themePrefKey);
     if (saved != null) {
-      state = ThemeMode.values.firstWhere(
-        (ThemeMode m) => m.name == saved,
-        orElse: () => ThemeMode.light,
-      );
+      state = saved == ThemeMode.dark.name ? ThemeMode.dark : ThemeMode.light;
     }
   }
 

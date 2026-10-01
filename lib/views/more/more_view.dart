@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/routes/route_names.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/launcher_utils.dart';
 import '../../models/auth_models.dart';
 import '../../providers/auth_provider.dart';
@@ -35,9 +36,9 @@ class MoreView extends ConsumerWidget {
               title: Text('Checking session…'),
             ),
             error: (Object e, StackTrace st) => ListTile(
-              leading: const Icon(Icons.person_outline),
+              leading: const Icon(Icons.person_outline, color: AppColors.gold),
               title: const Text('Guest User'),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
               onTap: () => context.push(RouteNames.profile),
             ),
             data: (UserModel? user) {
@@ -46,56 +47,53 @@ class MoreView extends ConsumerWidget {
                 // Login) so guests see the dedicated "Guest User / sign in
                 // to unlock personalized features" invitation there.
                 return ListTile(
-                  leading: const Icon(Icons.person_outline),
+                  leading: const Icon(Icons.person_outline, color: AppColors.gold),
                   title: const Text('Guest User'),
-                  subtitle: const Text('Sign in to unlock personalized features'),
-                  trailing: const Icon(Icons.chevron_right),
+                  subtitle:
+                      const Text('Sign in to unlock personalized features'),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
                   onTap: () => context.push(RouteNames.profile),
                 );
               }
               return ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(user.fullName?.isNotEmpty == true ? user.fullName! : user.username),
+                leading: const Icon(Icons.account_circle_outlined, color: AppColors.gold),
+                title: Text(user.fullName?.isNotEmpty == true
+                    ? user.fullName!
+                    : user.username),
                 subtitle: const Text('View & edit your profile'),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
                 onTap: () => context.push(RouteNames.profile),
               );
             },
           ),
           const Divider(height: 24),
           ListTile(
-            leading: const Icon(Icons.info_outline),
+            leading: const Icon(Icons.info_outline, color: AppColors.gold),
             title: const Text('About Kaysan Properties'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.about),
           ),
           ListTile(
-            leading: const Icon(Icons.mail_outline),
+            leading: const Icon(Icons.mail_outline, color: AppColors.gold),
             title: const Text('Contact Us'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.contact),
           ),
           ListTile(
-            leading: const Icon(Icons.article_outlined),
-            title: const Text('Blogs & Insights'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push(RouteNames.blogs),
-          ),
-          ListTile(
-            leading: const Icon(Icons.map_outlined),
+            leading: const Icon(Icons.map_outlined, color: AppColors.gold),
             title: const Text('Explore Areas'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.areas),
           ),
           ListTile(
-            leading: const Icon(Icons.calculate_outlined),
+            leading: const Icon(Icons.calculate_outlined, color: AppColors.gold),
             title: const Text('Mortgage & ROI Calculator'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.calculator),
           ),
           const Divider(height: 24),
           ListTile(
-            leading: const Icon(Icons.dark_mode_outlined),
+            leading: const Icon(Icons.dark_mode_outlined, color: AppColors.gold),
             title: const Text('Theme'),
             trailing: SegmentedButton<ThemeMode>(
               segments: const <ButtonSegment<ThemeMode>>[
@@ -104,7 +102,7 @@ class MoreView extends ConsumerWidget {
                     icon: Icon(Icons.light_mode, size: 16)),
                 ButtonSegment<ThemeMode>(
                     value: ThemeMode.dark,
-                    icon: Icon(Icons.dark_mode, size: 16)),
+                    icon: Icon(Icons.dark_mode_outlined, size: 16)),
               ],
               selected: <ThemeMode>{themeMode},
               onSelectionChanged: (Set<ThemeMode> selection) => ref
@@ -114,15 +112,15 @@ class MoreView extends ConsumerWidget {
           ),
           const Divider(height: 24),
           ListTile(
-            leading: const Icon(Icons.privacy_tip_outlined),
+            leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.gold),
             title: const Text('Privacy Policy'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.privacyPolicy),
           ),
           ListTile(
-            leading: const Icon(Icons.description_outlined),
+            leading: const Icon(Icons.description_outlined, color: AppColors.gold),
             title: const Text('Terms & Conditions'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.gold),
             onTap: () => context.push(RouteNames.terms),
           ),
           const Divider(height: 24),
@@ -154,6 +152,7 @@ class MoreView extends ConsumerWidget {
   }
 
   Widget _socialButton(IconData icon, VoidCallback onTap) {
-    return IconButton(icon: FaIcon(icon, size: 20), onPressed: onTap);
+    return IconButton(
+        icon: FaIcon(icon, size: 20, color: AppColors.gold), onPressed: onTap);
   }
 }

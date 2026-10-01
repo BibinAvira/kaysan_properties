@@ -10,53 +10,80 @@ class AppTextStyles {
 
   static TextTheme lightTextTheme = const TextTheme(
     displayLarge: TextStyle(
-      fontSize: 32,
-      fontWeight: FontWeight.w700,
+      fontSize: 30,
+      fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
       height: 1.2,
     ),
     displayMedium: TextStyle(
-      fontSize: 26,
-      fontWeight: FontWeight.w700,
+      fontSize: 24,
+      fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
       height: 1.25,
     ),
     headlineMedium: TextStyle(
-      fontSize: 22,
+      fontSize: 20,
       fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
     ),
     headlineSmall: TextStyle(
-      fontSize: 18,
+      fontSize: 17,
       fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
     ),
     titleMedium: TextStyle(
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
     ),
     bodyLarge: TextStyle(
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: FontWeight.w400,
       color: AppColors.textPrimaryLight,
       height: 1.4,
     ),
     bodyMedium: TextStyle(
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: FontWeight.w400,
-      color: AppColors.textSecondaryLight,
+      color: AppColors.textPrimaryLight,
       height: 1.4,
     ),
     labelLarge: TextStyle(
-      fontSize: 14,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: AppColors.textPrimaryLight,
+    ),
+    // Not used much, but defined so nothing falls back to Material's
+    // default grey (onSurfaceVariant) — all app text is black.
+    headlineLarge: TextStyle(
+      fontSize: 22,
       fontWeight: FontWeight.w600,
       color: AppColors.textPrimaryLight,
     ),
-    labelSmall: TextStyle(
-      fontSize: 12,
+    titleLarge: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimaryLight,
+    ),
+    titleSmall: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimaryLight,
+    ),
+    bodySmall: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
+      color: AppColors.textPrimaryLight,
+    ),
+    labelMedium: TextStyle(
+      fontSize: 11,
       fontWeight: FontWeight.w500,
-      color: AppColors.textSecondaryLight,
+      color: AppColors.textPrimaryLight,
+    ),
+    labelSmall: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: AppColors.textPrimaryLight,
     ),
   );
 

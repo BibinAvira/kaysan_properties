@@ -12,38 +12,29 @@ class HomeView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(blogsProvider);
-            ref.invalidate(testimonialsProvider);
-            await ref.read(projectsProvider.notifier).refresh();
-          },
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 24),
-            children: const <Widget>[
-              HomeGreetingHeader(),
-              HomeHeadline(),
-              HomeSearchBar(),
-              SizedBox(height: 12),
-              SignUpNudgeBanner(),
-              SizedBox(height: 4),
-              HomeCategoryChips(),
-              SizedBox(height: 8),
-              TopPropertySection(),
-              SizedBox(height: 8),
-              LatestProjectsSection(title: 'Latest Off-Plan Projects'),
-              SizedBox(height: 8),
-              //  StatsSection(),
-              DevelopersSection(),
-              AreasSection(),
-              WhyChooseSection(),
-              TestimonialsSection(),
-              BlogsSection(),
-              SizedBox(height: 12),
-            ],
-          ),
+      // No SafeArea on top: the hero photo runs up under the status bar,
+      // and HomeHero pads its own content below it.
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(areaCoverProvider);
+          await ref.read(projectsProvider.notifier).refresh();
+        },
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 24),
+          children: const <Widget>[
+            HomeHero(),
+            ExploreByAreaSection(),
+            SizedBox(height: 12),
+            HomeCategoryChips(),
+            SizedBox(height: 4),
+            TopPropertySection(),
+            SizedBox(height: 8),
+            PopularAreasSection(),
+            SizedBox(height: 12),
+            SignUpNudgeBanner(),
+            DevelopersSection(),
+            SizedBox(height: 12),
+          ],
         ),
       ),
     );

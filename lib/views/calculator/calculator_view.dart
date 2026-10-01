@@ -29,7 +29,6 @@ class CalculatorView extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Mortgage & ROI Calculator'),
           bottom: const TabBar(
-            labelColor: AppColors.primaryNavy,
             tabs: <Widget>[
               Tab(text: 'Mortgage'),
               Tab(text: 'ROI'),
@@ -103,15 +102,15 @@ class _ResultsCard extends StatelessWidget {
         children: <Widget>[
           Text(
             headlineLabel,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
             headlineValue,
             style: const TextStyle(
               color: AppColors.goldLight,
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
             ),
           ),
           if (rest.isNotEmpty) ...<Widget>[
@@ -125,10 +124,11 @@ class _ResultsCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
                     Text(record.key,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12)),
                     Text(record.value,
                         style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w600)),
+                            color: Colors.white, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -154,9 +154,12 @@ class _MortgageTab extends StatefulWidget {
 
 class _MortgageTabState extends State<_MortgageTab> {
   late final TextEditingController _price = TextEditingController(
-    text: widget.initialPrice != null ? widget.initialPrice!.toStringAsFixed(0) : '',
+    text: widget.initialPrice != null
+        ? widget.initialPrice!.toStringAsFixed(0)
+        : '',
   );
-  final TextEditingController _downPaymentPct = TextEditingController(text: '20');
+  final TextEditingController _downPaymentPct =
+      TextEditingController(text: '20');
   final TextEditingController _rate = TextEditingController(text: '4.5');
   final TextEditingController _years = TextEditingController(text: '25');
 
@@ -198,25 +201,42 @@ class _MortgageTabState extends State<_MortgageTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        _NumberField(label: 'Property Price', controller: _price, suffixText: 'AED', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Property Price',
+            controller: _price,
+            suffixText: 'AED',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Down Payment', controller: _downPaymentPct, suffixText: '%', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Down Payment',
+            controller: _downPaymentPct,
+            suffixText: '%',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Interest Rate', controller: _rate, suffixText: '% / yr', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Interest Rate',
+            controller: _rate,
+            suffixText: '% / yr',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Loan Term', controller: _years, suffixText: 'years', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Loan Term',
+            controller: _years,
+            suffixText: 'years',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 20),
         _ResultsCard(rows: <MapEntry<String, String>>[
-          MapEntry('Estimated Monthly Payment', Formatters.price(monthlyPayment)),
+          MapEntry(
+              'Estimated Monthly Payment', Formatters.price(monthlyPayment)),
           MapEntry('Down Payment', Formatters.price(downPayment)),
           MapEntry('Loan Amount', Formatters.price(principal)),
           MapEntry('Total Interest', Formatters.price(totalInterest)),
           MapEntry('Total Repaid', Formatters.price(totalPaid)),
         ]),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Estimate only — actual bank offers vary by lender, eligibility and fees.',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
@@ -237,11 +257,15 @@ class _RoiTab extends StatefulWidget {
 
 class _RoiTabState extends State<_RoiTab> {
   late final TextEditingController _price = TextEditingController(
-    text: widget.initialPrice != null ? widget.initialPrice!.toStringAsFixed(0) : '',
+    text: widget.initialPrice != null
+        ? widget.initialPrice!.toStringAsFixed(0)
+        : '',
   );
-  final TextEditingController _downPaymentPct = TextEditingController(text: '20');
+  final TextEditingController _downPaymentPct =
+      TextEditingController(text: '20');
   final TextEditingController _annualRent = TextEditingController();
-  final TextEditingController _annualExpenses = TextEditingController(text: '0');
+  final TextEditingController _annualExpenses =
+      TextEditingController(text: '0');
 
   @override
   void dispose() {
@@ -266,30 +290,48 @@ class _RoiTabState extends State<_RoiTab> {
 
     final double grossYield = price > 0 ? (annualRent / price) * 100 : 0;
     final double netYield = price > 0 ? (netAnnualIncome / price) * 100 : 0;
-    final double cashOnCash = investment > 0 ? (netAnnualIncome / investment) * 100 : 0;
+    final double cashOnCash =
+        investment > 0 ? (netAnnualIncome / investment) * 100 : 0;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        _NumberField(label: 'Property Price', controller: _price, suffixText: 'AED', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Property Price',
+            controller: _price,
+            suffixText: 'AED',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Down Payment', controller: _downPaymentPct, suffixText: '%', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Down Payment',
+            controller: _downPaymentPct,
+            suffixText: '%',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Expected Annual Rent', controller: _annualRent, suffixText: 'AED', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Expected Annual Rent',
+            controller: _annualRent,
+            suffixText: 'AED',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 12),
-        _NumberField(label: 'Annual Service Charges & Costs', controller: _annualExpenses, suffixText: 'AED', onChanged: () => setState(() {})),
+        _NumberField(
+            label: 'Annual Service Charges & Costs',
+            controller: _annualExpenses,
+            suffixText: 'AED',
+            onChanged: () => setState(() {})),
         const SizedBox(height: 20),
         _ResultsCard(rows: <MapEntry<String, String>>[
           MapEntry('Net Rental Yield', '${netYield.toStringAsFixed(2)}%'),
           MapEntry('Gross Rental Yield', '${grossYield.toStringAsFixed(2)}%'),
           MapEntry('Cash-on-Cash Return', '${cashOnCash.toStringAsFixed(2)}%'),
-          MapEntry('Your Investment (Down Payment)', Formatters.price(investment)),
+          MapEntry(
+              'Your Investment (Down Payment)', Formatters.price(investment)),
           MapEntry('Net Annual Income', Formatters.price(netAnnualIncome)),
         ]),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Estimate only — actual returns depend on occupancy, market conditions and financing terms.',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );

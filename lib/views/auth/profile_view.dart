@@ -299,13 +299,13 @@ class _GuestProfilePanel extends StatelessWidget {
         const Text(
           'Guest User',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
         Text(
           'Sign in to unlock personalized features',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14, height: 1.4),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 28),
         GlassAuthPanel(
@@ -379,11 +379,11 @@ class _AccountProfilePanel extends StatelessWidget {
                   children: <Widget>[
                     Text(user.username,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
+                            color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                     if (user.createdAt != null)
                       Text(
                         'Member since ${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11),
                       ),
                   ],
                 ),
@@ -479,7 +479,7 @@ class _BiometricToggleTile extends ConsumerWidget {
           const Expanded(
             child: Text(
               'Sign in with Face ID',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
           Switch(
@@ -524,7 +524,7 @@ class _GlassAvatar extends StatelessWidget {
       child: Center(
         child: Text(
           letter,
-          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
         ),
       ),
     );

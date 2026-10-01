@@ -88,8 +88,11 @@ class _DetailsContent extends ConsumerWidget {
                         child: SafeArea(
                           bottom: false,
                           child: _GalleryRoundButton(
-                            icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-                            iconColor: isFavorite ? AppColors.gold : Colors.white,
+                            icon: isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            iconColor:
+                                isFavorite ? AppColors.gold : Colors.white,
                             onTap: () async {
                               if (await requireAuth(context, ref)) {
                                 ref
@@ -108,9 +111,6 @@ class _DetailsContent extends ConsumerWidget {
                   child: ColoredBox(
                     color: Theme.of(context).scaffoldBackgroundColor,
                     child: const TabBar(
-                      labelColor: AppColors.primaryNavy,
-                      unselectedLabelColor: AppColors.textSecondaryLight,
-                      indicatorColor: AppColors.gold,
                       indicatorWeight: 3,
                       tabs: <Widget>[
                         Tab(text: 'Overview'),
@@ -145,8 +145,14 @@ class _DetailsContent extends ConsumerWidget {
               shareTitle: project.title.display,
               shareUrl: project.addressText.isNotEmpty
                   ? project.addressText
-                  : 'https://www.x-opperp.com/property/${project.id}',
-              whatsappMessage: 'Hi, I\'m interested in ${project.title.display}.',
+                  // TODO: point at this property's real page on the
+                  // Kaysan Properties website once that URL pattern is
+                  // known — this previously pointed at an API vendor's
+                  // domain (x-opperp.com), which was never a real
+                  // shareable page either.
+                  : 'https://kaysanproperties.ae',
+              whatsappMessage:
+                  'Hi, I\'m interested in ${project.title.display}.',
             ),
           ],
         ),
@@ -174,7 +180,8 @@ class _PriceEnquireBar extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Starting Price', style: Theme.of(context).textTheme.labelSmall),
+                Text('Starting Price',
+                    style: Theme.of(context).textTheme.labelSmall),
                 Text(
                   project.lowPrice > 0
                       ? Formatters.priceCompact(project.lowPrice)
@@ -208,7 +215,8 @@ class _PriceEnquireBar extends ConsumerWidget {
 /// the gallery, matching the Figma design's overlay buttons — now a true
 /// frosted liquid-glass circle rather than an opaque white disc.
 class _GalleryRoundButton extends StatelessWidget {
-  const _GalleryRoundButton({required this.icon, required this.onTap, this.iconColor});
+  const _GalleryRoundButton(
+      {required this.icon, required this.onTap, this.iconColor});
   final IconData icon;
   final VoidCallback onTap;
   final Color? iconColor;
@@ -297,6 +305,9 @@ class _OverviewTab extends StatelessWidget {
     final String descriptionText = project.description != null
         ? HtmlUtils.stripTags(project.description!.display)
         : '';
+    final List<PaymentPlanModel> paymentPlans = project.paymentPlans
+        .where((PaymentPlanModel plan) => plan.values.isNotEmpty)
+        .toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 24),
@@ -333,12 +344,11 @@ class _OverviewTab extends StatelessWidget {
                 Text('About this project',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
-                Text(
-                  descriptionText.isNotEmpty
-                      ? descriptionText
-                      : 'No description provided for this project yet.',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+                if (descriptionText.isNotEmpty)
+                  ProjectDescription(text: descriptionText)
+                else
+                  Text('Description not available',
+                      style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
@@ -349,11 +359,14 @@ class _OverviewTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium),
           ),
           const SizedBox(height: 10),
+          // Reelly sometimes returns a plan with a name but no steps — that
+          // rendered as an empty "Payment plan" card, so only plans with at
+          // least one step count.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: project.paymentPlans.isNotEmpty
-                ? PaymentPlanCard(plans: project.paymentPlans)
-                : Text('Payment plan details are not available for this project yet.',
+            child: paymentPlans.isNotEmpty
+                ? PaymentPlanCard(plans: paymentPlans)
+                : Text('Payment plan not available',
                     style: Theme.of(context).textTheme.bodyMedium),
           ),
           const SizedBox(height: 8),
@@ -385,17 +398,23 @@ class _KeyFactsRow extends StatelessWidget {
     final List<(String, String)> facts = <(String, String)>[
       (
         'Starting Price',
-        project.lowPrice > 0 ? Formatters.priceCompact(project.lowPrice) : 'On Request',
+        project.lowPrice > 0
+            ? Formatters.priceCompact(project.lowPrice)
+            : 'On Request',
       ),
       ('Status', project.salesStatusDisplay),
       // Hidden entirely (rather than falling back to a status word) when
       // there's no real handover date — see ProjectModel._parseDeliveryDate
       // for why a date isn't always available even for an Off-Plan project.
       if (handover != null) ('Handover', Formatters.handoverLabel(handover)),
-      if (project.propertyType.isNotEmpty) ('Property Type', project.propertyType),
-      if (project.minArea > 0) ('Area', 'From ${project.minArea.toStringAsFixed(0)} sq.ft'),
-      if (project.subunitCount.display.isNotEmpty) ('Unit Type', project.subunitCount.display),
-      if (project.residentialUnits != null) ('Units', '${project.residentialUnits}'),
+      if (project.propertyType.isNotEmpty)
+        ('Property Type', project.propertyType),
+      if (project.minArea > 0)
+        ('Area', 'From ${project.minArea.toStringAsFixed(0)} sq.ft'),
+      if (project.subunitCount.display.isNotEmpty)
+        ('Unit Type', project.subunitCount.display),
+      if (project.residentialUnits != null)
+        ('Units', '${project.residentialUnits}'),
     ];
 
     return Container(
@@ -407,19 +426,21 @@ class _KeyFactsRow extends StatelessWidget {
       child: Wrap(
         spacing: 20,
         runSpacing: 14,
-        children: facts.map(((String, String) f) => _fact(context, f.$1, f.$2)).toList(),
+        children: facts
+            .map(((String, String) f) => _fact(context, f.$1, f.$2))
+            .toList(),
       ),
     );
   }
 
   Widget _fact(BuildContext context, String label, String value) {
     return SizedBox(
-      width: 130,
+      width: 140,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(value,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
                   .textTheme

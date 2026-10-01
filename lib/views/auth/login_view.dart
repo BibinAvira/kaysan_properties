@@ -79,8 +79,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
               'Welcome back',
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 6),
@@ -88,7 +88,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
               'Log in to save favorites, track enquiries, and pick up where you left off.',
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.75),
-                  fontSize: 14,
+                  fontSize: 13,
                   height: 1.4),
             ),
             const SizedBox(height: 24),

@@ -6,13 +6,14 @@ class RouteNames {
   static const String splash = '/splash';
   static const String home = '/';
   static const String listings = '/listings';
+  static const String offPlan = '/off-plan';
+  static const String ready = '/ready';
   static const String search = '/search';
   static const String propertyDetails = '/property/:id';
   static const String areas = '/areas';
   static const String areaDetails = '/areas/:id';
+  static const String developers = '/developers';
   static const String developerDetails = '/developers/:id';
-  static const String blogs = '/blogs';
-  static const String blogDetails = '/blogs/:id';
   static const String favorites = '/favorites';
   static const String calculator = '/calculator';
   static const String contact = '/contact';
@@ -27,5 +28,4 @@ class RouteNames {
   static String propertyDetailsPath(int id) => '/property/$id';
   static String areaDetailsPath(int id) => '/areas/$id';
   static String developerDetailsPath(int id) => '/developers/$id';
-  static String blogDetailsPath(int id) => '/blogs/$id';
 }

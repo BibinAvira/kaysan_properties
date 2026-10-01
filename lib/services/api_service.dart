@@ -23,7 +23,7 @@ class ApiService {
                 const Duration(seconds: AppConstants.apiTimeoutSeconds),
             headers: <String, String>{
               'Accept': 'application/json',
-              'X-API-Key': AppConfig.xoppApiKey,
+              'X-API-Key': AppConfig.propertyApiKey,
             },
           ),
         ) {
@@ -49,6 +49,21 @@ class ApiService {
       final Response<dynamic> response =
           await _dio.get<dynamic>(path, queryParameters: queryParameters);
       return response.data as Map<String, dynamic>;
+    });
+  }
+
+  /// Fetches an endpoint whose response body is a bare JSON array rather
+  /// than an object (e.g. Reelly's `/developers`, `/districts`) — [get]
+  /// can't be used for these since it always casts the response to
+  /// `Map<String, dynamic>`.
+  Future<List<dynamic>> getRawList(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return _withRetry(() async {
+      final Response<dynamic> response =
+          await _dio.get<dynamic>(path, queryParameters: queryParameters);
+      return response.data as List<dynamic>;
     });
   }
 

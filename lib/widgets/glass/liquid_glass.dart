@@ -302,8 +302,8 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                           widget.label,
                           style: TextStyle(
                             color: widget.accentColor ?? Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: 0.3,
                           ),
                         ),

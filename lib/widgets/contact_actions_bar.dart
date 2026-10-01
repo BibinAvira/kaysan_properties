@@ -27,6 +27,9 @@ class ContactActionsBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color callColor =
+        isDark ? AppColors.textPrimaryDark : AppColors.primaryNavy;
     return SafeArea(
       top: false,
       child: Container(
@@ -44,7 +47,7 @@ class ContactActionsBar extends ConsumerWidget {
           children: <Widget>[
             _ActionIconButton(
               icon: Icons.call,
-              color: AppColors.primaryNavy,
+              color: callColor,
               label: 'Call',
               onTap: () async {
                 if (await requireAuth(context, ref)) {
@@ -85,9 +88,12 @@ class ContactActionsBar extends ConsumerWidget {
               const SizedBox(width: 10),
               _ActionIconButton(
                 icon: Icons.share_outlined,
-                color: AppColors.textSecondaryLight,
+                // Theme-aware like Call — a fixed near-black vanished in
+                // dark mode.
+                color: callColor,
                 label: 'Share',
-                onTap: () => LauncherUtils.shareProperty(title: shareTitle!, url: shareUrl!),
+                onTap: () => LauncherUtils.shareProperty(
+                    title: shareTitle!, url: shareUrl!),
               ),
             ],
           ],
@@ -128,9 +134,9 @@ class _ActionIconButton extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(label,
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         color: color,
-                        fontWeight: FontWeight.w600)),
+                        fontWeight: FontWeight.w500)),
               ],
             ),
           ),

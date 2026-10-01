@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kaysan_properties/repositories/projects_repository.dart';
 import '../../core/auth/guest_gate.dart';
 import '../../core/routes/route_names.dart';
+import '../../core/theme/app_colors.dart';
 import '../../models/project_model.dart';
 import '../../providers/favorites_provider.dart';
 import '../../providers/projects_provider.dart';
@@ -17,8 +18,15 @@ import 'widgets/filter_sheet.dart';
 /// sheet, and an infinite-scrolling grid of [PropertyCard]s. Scrolling
 /// near the bottom triggers [ProjectsController.loadMore], which follows
 /// the API's own `next_page_url` rather than guessing page numbers.
+///
+/// All / Off-Plan / Ready tabs under the search bar narrow it by status
+/// (server-side — see [ProjectFilter.statusCode]); the title follows the
+/// tab. Opened with [propertyStatusCode], it starts on that tab.
 class ListingsView extends ConsumerStatefulWidget {
-  const ListingsView({super.key});
+  const ListingsView({super.key, this.propertyStatusCode});
+
+  /// Tab to start on: `null` leaves the current one; `1` Ready; `2` Off-Plan.
+  final int? propertyStatusCode;
 
   @override
   ConsumerState<ListingsView> createState() => _ListingsViewState();
@@ -31,7 +39,18 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    final int? start = widget.propertyStatusCode;
+    if (start != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => ref.read(projectFilterProvider.notifier).setStatus(start));
+    }
   }
+
+  static String _titleFor(int? statusCode) => switch (statusCode) {
+        1 => 'Ready Properties',
+        2 => 'Off-Plan Projects',
+        _ => 'All Properties',
+      };
 
   @override
   void dispose() {
@@ -44,7 +63,15 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
     if (!_scrollController.hasClients) return;
     final double threshold = _scrollController.position.maxScrollExtent - 400;
     if (_scrollController.position.pixels >= threshold) {
-      ref.read(projectsProvider.notifier).loadMore();
+      final FilteredProjectsController filtered =
+          ref.read(filteredProjectsProvider.notifier);
+      // A region/area filter pages its own server-filtered results rather than
+      // the general feed — see FilteredProjectsController.isServerPaged.
+      if (filtered.isServerPaged) {
+        filtered.loadMore();
+      } else {
+        ref.read(projectsProvider.notifier).loadMore();
+      }
     }
   }
 
@@ -73,36 +100,107 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
         ref.watch(filteredProjectsProvider);
     final ProjectFilter filter = ref.watch(projectFilterProvider);
     final AsyncValue<Set<int>> favorites = ref.watch(favoritesProvider);
-    final bool isLoadingMore =
-        ref.watch(projectsProvider).valueOrNull?.isLoadingMore ?? false;
-    final bool hasMore =
-        ref.watch(projectsProvider).valueOrNull?.hasMore ?? false;
+    final ProjectsPageState? pageState =
+        ref.watch(projectsProvider).valueOrNull;
+    final FilteredProjectsController filteredController =
+        ref.read(filteredProjectsProvider.notifier);
+    final bool serverPaged = filteredController.isServerPaged;
+    final bool isLoadingMore = serverPaged
+        ? filteredController.serverIsLoadingMore
+        : pageState?.isLoadingMore ?? false;
+    final bool hasMore = serverPaged
+        ? filteredController.serverHasMore
+        : pageState?.hasMore ?? false;
+
+    // Only the unscoped "All Properties" catalog shows a headline count —
+    // the API's own reported total while browsing unfiltered (so it isn't
+    // capped at whatever page has loaded so far), or the live match count
+    // once a search/filter narrows it down.
+    final bool isUnfiltered =
+        !filter.hasActiveFilters && filter.debouncedQuery.trim().isEmpty;
+    // Region/area (+ developer) alone is filtered entirely server-side, so the
+    // server's total is the real count even before every page has loaded.
+    final bool serverOnly = serverPaged && filter.districtId == null;
+    final int? count = isUnfiltered
+            ? pageState?.totalCount
+            : serverOnly
+                ? filteredController.serverTotalCount
+                : filtered.valueOrNull?.length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Off-Plan Projects')),
+      appBar: AppBar(
+        title: Text(_titleFor(filter.statusCode)),
+        // bottom: count == null
+        //     ? null
+        //     : PreferredSize(
+        //         preferredSize: const Size.fromHeight(22),
+        //         child: Padding(
+        //           padding: const EdgeInsets.only(bottom: 8),
+        //           child: Text(
+        //             '$count ${count == 1 ? 'Property' : 'Properties'}',
+        //             style: Theme.of(context).textTheme.labelSmall,
+        //           ),
+        //         ),
+        //       ),
+      ),
       body: Column(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            // Same look as the Home search bar: a white pill with a soft
+            // shadow, and a round white filter button beside it.
             child: Row(
               children: <Widget>[
                 Expanded(
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Search by project, area or developer',
-                      prefixIcon: Icon(Icons.search),
+                  child: Material(
+                    color: Theme.of(context).cardColor,
+                    elevation: 6,
+                    shadowColor: Colors.black.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(28),
+                    child: SizedBox(
+                      height: 52,
+                      child: Center(
+                        child: TextField(
+                          style: const TextStyle(fontSize: 12),
+                          textAlignVertical: TextAlignVertical.center,
+                          decoration: const InputDecoration(
+                            hintText: 'Search by project, area or developer',
+                            hintStyle: TextStyle(fontSize: 12),
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 14),
+                            prefixIcon: Padding(
+                              padding: EdgeInsets.only(left: 15, right: 2),
+                              child: Icon(Icons.search,
+                                  size: 22,
+                                  color: AppColors.textSecondaryLight),
+                            ),
+                            prefixIconConstraints:
+                                BoxConstraints(minWidth: 0, minHeight: 0),
+                          ),
+                          onChanged: (String v) => ref
+                              .read(projectFilterProvider.notifier)
+                              .setQuery(v),
+                        ),
+                      ),
                     ),
-                    onChanged: (String v) =>
-                        ref.read(projectFilterProvider.notifier).setQuery(v),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Badge(
                   isLabelVisible: filter.hasActiveFilters,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.tune),
-                    onPressed: () => showModalBottomSheet<void>(
+                  backgroundColor: AppColors.gold,
+                  child: RoundIconButton(
+                    icon: Icons.tune_rounded,
+                    size: 52,
+                    onTap: () => showModalBottomSheet<void>(
                       context: context,
+                      // Above the tab shell, so the floating nav bar doesn't cover
+                      // the sheet or inflate its bottom safe-area padding.
+                      useRootNavigator: true,
                       isScrollControlled: true,
                       showDragHandle: true,
                       builder: (BuildContext context) => const FilterSheet(),
@@ -112,6 +210,14 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
               ],
             ),
           ),
+          StatusTabs(
+            selected: filter.statusCode,
+            onChanged: (int? status) {
+              ref.read(projectFilterProvider.notifier).setStatus(status);
+              if (_scrollController.hasClients) _scrollController.jumpTo(0);
+            },
+          ),
+          const SizedBox(height: 12),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
@@ -127,7 +233,8 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
                     onActionTap: _refresh,
                   ),
                 ),
-                data: (List<ProjectModel> list) {
+                data: (List<ProjectModel> rawList) {
+                  final List<ProjectModel> list = rawList;
                   if (list.isEmpty) {
                     // Pull-to-refresh needs a Scrollable descendant to
                     // detect the drag — a bare EmptyStateView (just a

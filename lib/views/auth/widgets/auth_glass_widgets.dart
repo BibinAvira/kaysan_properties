@@ -169,7 +169,7 @@ class GlassTextField extends StatelessWidget {
       autofillHints: autofillHints,
       onFieldSubmitted: onFieldSubmitted,
       cursorColor: Colors.white,
-      style: const TextStyle(color: Colors.white, fontSize: 15),
+      style: const TextStyle(color: Colors.white, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.75)),

@@ -105,7 +105,7 @@ class _ImageGalleryState extends State<ImageGallery> {
               blur: 20,
               tintOpacity: 0.16,
               child: Text('${_index + 1}/${images.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  style: const TextStyle(color: Colors.white, fontSize: 11)),
             ),
           ),
         ],
@@ -163,6 +163,67 @@ class _GalleryArrowButton extends StatelessWidget {
   }
 }
 
+/// Project overview text. Reelly's `overview` is Markdown — every project
+/// uses `#####` section headings ("Project general facts", "Location
+/// description and benefits", …) and a few use `-` bullets — so rather
+/// than show the raw symbols, headings become bold subheadings, bullets
+/// become "•", and stray `**`/`\` markup is dropped.
+class ProjectDescription extends StatelessWidget {
+  const ProjectDescription({super.key, required this.text});
+  final String text;
+
+  static final RegExp _heading = RegExp(r'^\s*#{1,6}\s*(.*?)\s*#*\s*$');
+  static final RegExp _bullet = RegExp(r'^\s*\\?[-*+]\s+');
+  static final RegExp _escape = RegExp(r'\\([\\`*_{}\[\]()#+\-.!])');
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final List<Widget> blocks = <Widget>[];
+    final List<String> paragraph = <String>[];
+
+    void flushParagraph() {
+      if (paragraph.isEmpty) return;
+      blocks.add(Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(paragraph.join('\n'), style: textTheme.bodyLarge),
+      ));
+      paragraph.clear();
+    }
+
+    for (final String rawLine in text.split('\n')) {
+      final String line = rawLine.replaceAll('**', '');
+      final RegExpMatch? heading = _heading.firstMatch(line);
+      if (heading != null) {
+        flushParagraph();
+        final String title = heading.group(1)!.replaceAllMapped(
+            _escape, (Match m) => m.group(1)!);
+        if (title.isNotEmpty) {
+          blocks.add(Padding(
+            padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 4, bottom: 6),
+            child: Text(title,
+                style: textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+          ));
+        }
+      } else if (line.trim().isEmpty) {
+        flushParagraph();
+      } else {
+        paragraph.add(line
+            .replaceFirst(_bullet, '• ')
+            .replaceAllMapped(_escape, (Match m) => m.group(1)!)
+            .trim());
+      }
+    }
+    flushParagraph();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: blocks,
+    );
+  }
+}
+
 /// Facilities grid (e.g. "Swimming Pool", "Gym", "Concierge Service"). The
 /// API only gives `{id, name}` — no icon hint — so an icon is resolved by
 /// keyword-matching the (English) facility name, falling back to a
@@ -200,9 +261,10 @@ class FacilitiesGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (facilities.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: Text('No facilities listed for this project yet.'),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text('Facilities not available',
+            style: Theme.of(context).textTheme.bodyMedium),
       );
     }
     return GridView.builder(
@@ -340,7 +402,7 @@ class FloorPlansTab extends StatelessWidget {
                       Text(label,
                           style: TextStyle(
                               color: _unitStatusColor(unit.status),
-                              fontWeight: FontWeight.w600)),
+                              fontWeight: FontWeight.w500)),
                   ],
                 ),
                 trailing: unit.price != null
@@ -431,8 +493,8 @@ class PaymentPlanCard extends StatelessWidget {
                             child: Text(plan.description.display,
                                 style: const TextStyle(
                                     color: AppColors.gold,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
                           ),
                         ],
                       ],
@@ -452,7 +514,7 @@ class PaymentPlanCard extends StatelessWidget {
                                   style: Theme.of(context)
                                       .textTheme
                                       .titleMedium
-                                      ?.copyWith(fontSize: 14)),
+                                      ?.copyWith(fontSize: 13)),
                             ],
                           ),
                         )),

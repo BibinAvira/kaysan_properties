@@ -35,7 +35,6 @@ class AppConstants {
   static const String statExperience = '20+ Years';
   static const String statClients = '5,000+';
 
-  static const int splashDurationMs = 1800;
   static const int apiTimeoutSeconds = 20;
   static const int apiRetryCount = 2;
 }

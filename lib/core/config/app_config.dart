@@ -8,41 +8,41 @@
 class AppConfig {
   AppConfig._();
 
-  /// Live: backed by the X-OPP Partner Property API (read-only, key +
-  /// IP-whitelist gated). Projects/Areas/Developers now come from this
-  /// API — see [useMockData] below, which no longer applies to them.
+  /// Live: backed by the Reelly real-estate data API (read-only, key
+  /// gated). Projects/Developers now come from this API — see
+  /// [useMockData] below, which no longer applies to them.
   static const bool useMockData = false;
 
   /// Blogs, Testimonials, and Enquiry submission have **no equivalent
-  /// endpoint** on the x-opp microservice (it's a properties-only API), so
-  /// they stay on the local mock dataset regardless of [useMockData].
+  /// endpoint** on Reelly either (it's a property-data-only API), so they
+  /// stay on the local mock dataset regardless of [useMockData].
   /// This is intentionally a separate flag — flipping [useMockData] to
   /// `true` (e.g. for offline demos) does not accidentally imply these
   /// have a live counterpart, and flipping this to `false` requires
   /// actually wiring up real blog/testimonial/enquiry endpoints first.
   static const bool useMockContent = true;
 
-  /// Live API root — the X-OPP Partner Property API. Endpoints used:
-  ///   GET {apiBaseUrl}/properties/            — paginated property list
-  ///   GET {apiBaseUrl}/properties/{id}/       — single property detail
-  ///   GET {apiBaseUrl}/properties/{id}/units/ — a project's individual units
-  /// Every request must carry [xoppApiKey] in an `X-API-Key` header (see
-  /// [ApiService]); the partner's server IP must also be whitelisted with
-  /// the X-OPP administrator, or requests fail with 401 regardless of key.
-  static const String apiBaseUrl = 'https://www.x-opperp.com/api/v1/partner';
+  /// Live API root — the Reelly real-estate data API. Endpoints used:
+  ///   GET {apiBaseUrl}/projects            — paginated project list
+  ///   GET {apiBaseUrl}/projects/{id}       — single project detail
+  ///   GET {apiBaseUrl}/projects/{id}/units — a project's individual units
+  ///                                          (Enterprise-tier gated)
+  ///   GET {apiBaseUrl}/developers          — full developer directory
+  /// Every request must carry [propertyApiKey] in an `X-API-Key` header
+  /// (see [ApiService]).
+  static const String apiBaseUrl =
+      'https://api-reelly.up.railway.app/api/v2/clients';
 
-  /// X-OPP partner API key, sent as `X-API-Key` on every [apiBaseUrl]
-  /// request. Shown only once at creation by the X-OPP administrator — if
-  /// it needs rotating, this is the only place to update it.
+  /// Reelly API key, sent as `X-API-Key` on every [apiBaseUrl] request.
   ///
   /// NOTE: this key is baked into the compiled app, so anyone can extract
-  /// it from the APK/IPA. The X-OPP docs say to call this API from a
+  /// it from the APK/IPA. Reelly's own guidance is to call this API from a
   /// backend server, never a browser/app client, specifically because a
-  /// client-embedded key is exposed and because requests are IP-whitelisted
-  /// (a phone's IP isn't the whitelisted server IP). Wiring it in directly
-  /// like this is fine for local/dev testing in the emulator, but it should
-  /// go through your own backend before shipping to real users.
-  static const String xoppApiKey = 'xopp_LqYcvEGLbzmmJGfzo6vGaaPdSWYw6cDf5OVuBEpH8qk';
+  /// client-embedded key is exposed. Wiring it in directly like this is
+  /// fine for local/dev testing, but it should go through your own backend
+  /// before shipping to real users.
+  static const String propertyApiKey =
+      'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRfbmFtZSI6IktheXNhbiBQcm9wZXJ0aWVzIn0.bdm6qzX5VAWJhcY2tNTRl6qty3-aK60StIAmq4S7-Tv10_fGYm_oTV9GEMdyrF2Dm3CXWudb7_wQ1qyGxFIvqw';
 
   /// Auth microservice root — separate backend from [apiBaseUrl] above, so
   /// it gets its own [ApiService]-style client (see `AuthService`) rather

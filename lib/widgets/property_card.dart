@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/formatters.dart';
 import '../models/project_model.dart';
 import 'common_widgets.dart';
-import 'glass/liquid_glass.dart';
 
-/// The single card representation of a [ProjectModel], reused across Home,
-/// Listings, Favorites and Area Details so the visual language stays
-/// consistent everywhere a property is listed.
+/// The single card representation of a [ProjectModel], reused across
+/// Listings, Favorites, developer and area pages so the visual language
+/// stays consistent everywhere a property is listed.
+///
+/// "Photo overlay" design: the photo fills the whole card, a dark fade at
+/// the bottom carries the name, "developer · area", and two pills —
+/// handover date and the gold price.
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
     super.key,
@@ -24,103 +28,118 @@ class PropertyCard extends StatelessWidget {
   final VoidCallback onFavoriteTap;
   final double? width;
 
+  /// Soft drop shadow so the white title/subtitle stay crisp over bright
+  /// patches of the cover photo that the fade doesn't fully darken.
+  static const List<Shadow> _textShadow = <Shadow>[
+    Shadow(color: Color(0x99000000), blurRadius: 6, offset: Offset(0, 1)),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
+    final DateTime? handover = project.handoverDate;
+    final String subtitle = <String>[
+      project.developer.name,
+      project.district.name.display,
+    ].where((String s) => s.isNotEmpty).join(' · ');
+
     return SizedBox(
       width: width,
-      child: Card(
+      child: Material(
+        color: AppColors.divider,
+        borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
+            fit: StackFit.expand,
             children: <Widget>[
-              // Image now flexes to fill whatever space is left after the
-              // text block below takes what it needs — this is what
-              // eliminates the bottom overflow, since the old AspectRatio
-              // sized the image purely off card width, independent of the
-              // grid cell's actual height.
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    AppNetworkImage(url: project.cover),
-                    if (project.handoverDate != null)
-                      Positioned(
-                        top: 10,
-                        left: 10,
-                        child: _Badge(
-                          text: 'Handover: ${Formatters.handoverLabel(project.handoverDate!)}',
-                        ),
-                      ),
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: _FavoriteButton(
-                          isFavorite: isFavorite, onTap: onFavoriteTap),
+              AppNetworkImage(url: project.cover),
+              // Dark fade over the lower 70% so white text stays legible
+              // on any photo.
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                top: 0,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: <Color>[
+                        Color(0xF00C0D12),
+                        Color(0x000C0D12),
+                      ],
+                      stops: <double>[0, 0.7],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: _FavoriteButton(
+                    isFavorite: isFavorite, onTap: onFavoriteTap),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Text(
                       project.title.display,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        shadows: _textShadow,
+                      ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'by ${project.developer.name}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text.rich(
-                      TextSpan(
-                        style: theme.textTheme.bodyMedium,
-                        children: <InlineSpan>[
-                          const TextSpan(text: 'Starting Price  '),
-                          TextSpan(
+                    if (subtitle.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          shadows: _textShadow,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    // One row on every card (a Wrap put the second pill on
+                    // its own line on narrow cards, so cards didn't match).
+                    // Price first; either pill shortens with "…" if needed.
+                    Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: _Pill(
                             text: project.lowPrice > 0
                                 ? Formatters.priceCompact(project.lowPrice)
                                 : 'On Request',
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(color: AppColors.gold),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: <Widget>[
-                        Icon(Icons.location_on_outlined,
-                            size: 14, color: theme.textTheme.bodyMedium?.color),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: Text(
-                            project.district.name.display,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall,
+                            background: AppColors.goldLight,
+                            foreground: const Color(0xFF1C1400),
+                            bold: true,
                           ),
                         ),
-                        if (project.subunitCount.display.isNotEmpty)
+                        if (handover != null) ...<Widget>[
+                          const SizedBox(width: 5),
                           Flexible(
-                            child: Text(
-                              project.subunitCount.display,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: theme.textTheme.labelSmall,
+                            child: _Pill(
+                              text: DateFormat('MMM yyyy').format(handover),
+                              background: Colors.black.withValues(alpha: 0.45),
+                              foreground: Colors.white,
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ],
@@ -134,26 +153,44 @@ class PropertyCard extends StatelessWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text});
+/// Small rounded label on the photo (handover date, price).
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.text,
+    required this.background,
+    required this.foreground,
+    this.bold = false,
+  });
+
   final String text;
+  final Color background;
+  final Color foreground;
+  final bool bold;
 
   @override
   Widget build(BuildContext context) {
-    return LiquidGlassPill(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      borderRadius: 9,
-      blur: 20,
-      tintOpacity: 0.14,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Text(
         text,
-        style: const TextStyle(
-            color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 10.5,
+          height: 1.25,
+          fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
+        ),
       ),
     );
   }
 }
 
+/// White round heart in a 44px tap area in the photo's top-right corner.
 class _FavoriteButton extends StatelessWidget {
   const _FavoriteButton({required this.isFavorite, required this.onTap});
   final bool isFavorite;
@@ -161,14 +198,29 @@ class _FavoriteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LiquidGlassCircle(
-      icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-      iconColor: isFavorite ? AppColors.error : Colors.white,
-      size: 32,
-      iconSize: 17,
-      blur: 20,
-      tintOpacity: 0.18,
-      onTap: onTap,
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Center(
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.92),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: Icon(
+                isFavorite ? Icons.favorite : Icons.favorite_border,
+                size: 16,
+                color:
+                    isFavorite ? AppColors.error : AppColors.textPrimaryLight,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

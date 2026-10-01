@@ -1,7 +1,7 @@
 name: kaysan_properties
 description: "Kaysan Properties — native Flutter app for Dubai off-plan real estate."
 publish_to: "none"
-version: 1.0.2+2
+version: 1.0.2+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -49,6 +49,7 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   country_code_picker: ^3.4.1
   font_awesome_flutter: ^10.9.1
+  flutter_native_splash: ^2.4.6
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,12 @@ flutter:
     - assets/images/
     - assets/icons/
 
+  # Serif display face for the Home headline (SIL Open Font License).
+  fonts:
+    - family: DMSerifDisplay
+      fonts:
+        - asset: assets/fonts/DMSerifDisplay-Regular.ttf
+
 flutter_launcher_icons:
   android: true
   ios: true
@@ -69,8 +76,10 @@ flutter_launcher_icons:
   min_sdk_android: 21
   remove_alpha_ios: true
 
-  # Android Adaptive Icon
-  adaptive_icon_foreground: "assets/icons/app_logo.png"
+  # Android Adaptive Icon — uses the uncropped original: Android masks the
+  # foreground to roughly its middle two-thirds, so the tighter crop would
+  # clip the logo's edges.
+  adaptive_icon_foreground: "design/app_logo_original.png"
   adaptive_icon_background: "#FFFFFF"
 
   # fonts:
@@ -83,3 +92,15 @@ flutter_launcher_icons:
   #         weight: 600
   #       - asset: assets/fonts/Poppins-Bold.ttf
   #         weight: 700
+
+# Native launch screen (shown by iOS/Android before Flutter draws its first
+# frame — replaces the blank white screen). Regenerate after editing with:
+#   dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/splash/splash_logo.png
+  android_12:
+    color: "#FFFFFF"
+    image: assets/splash/splash_logo_android12.png
+  ios_content_mode: center
+  fullscreen: false

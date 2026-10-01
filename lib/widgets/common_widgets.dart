@@ -24,7 +24,7 @@ class SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           Expanded(
             child: Column(
@@ -41,7 +41,27 @@ class SectionHeader extends StatelessWidget {
           if (actionLabel != null)
             TextButton(
               onPressed: onActionTap,
-              child: Text(actionLabel!, style: const TextStyle(color: AppColors.gold)),
+              // Compact: the default 48px-tall tap target made every
+              // section header noticeably taller than its title.
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(actionLabel!,
+                      style: const TextStyle(
+                          color: AppColors.gold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward,
+                      size: 16, color: AppColors.gold),
+                ],
+              ),
             ),
         ],
       ),
@@ -140,4 +160,120 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+/// Round white button with a soft shadow — the filter/notification buttons
+/// beside the Home and Listings search bars.
+class RoundIconButton extends StatelessWidget {
+  const RoundIconButton(
+      {super.key, required this.icon, required this.onTap, this.size = 48});
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Theme.of(context).cardColor,
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: 0.18),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon,
+              size: 24,
+              color:
+                  dark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+        ),
+      ),
+    );
+  }
+}
+
+/// All / Off-Plan / Ready segmented tabs (Home and the Projects page).
+/// Values are [ProjectModel.propertyStatusCode]s — 1 = Ready (`completed`),
+/// 2 = Off-Plan (`under_construction` / `presale`), null = All. There's no
+/// resale data on this API, so no Resale tab.
+class StatusTabs extends StatelessWidget {
+  const StatusTabs({super.key, required this.selected, required this.onChanged});
+
+  final int? selected;
+  final ValueChanged<int?> onChanged;
+
+  static const List<(String, int?)> _options = <(String, int?)>[
+    ('All', null),
+    ('Off-Plan', 2),
+    ('Ready', 1),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final bool dark = theme.brightness == Brightness.dark;
+    final int selectedIndex = _options
+        .indexWhere(((String, int?) o) => o.$2 == selected)
+        .clamp(0, _options.length - 1);
+
+    return Container(
+      height: 50,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Row(
+        children: <Widget>[
+          for (int i = 0; i < _options.length; i++) ...<Widget>[
+            // Divider only between two unselected neighbours.
+            if (i > 0)
+              Container(
+                width: 1,
+                height: 20,
+                color: i == selectedIndex || i - 1 == selectedIndex
+                    ? Colors.transparent
+                    : theme.dividerColor,
+              ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(_options[i].$2),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    // Dark mode: a white pill (near-black vanished on the
+                    // dark page), like the bottom bar's selected circle.
+                    color: i == selectedIndex
+                        ? (dark ? Colors.white : AppColors.primaryNavy)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(21),
+                  ),
+                  child: Text(
+                    _options[i].$1,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          i == selectedIndex ? FontWeight.w500 : FontWeight.w400,
+                      color: i == selectedIndex
+                          ? (dark ? AppColors.primaryNavy : Colors.white)
+                          : theme.textTheme.bodyMedium?.color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Brand palette — reskinned to match the new Figma design: a clean,
 /// airy off-white canvas, near-black for primary UI chrome (selected chips,
-/// headings, the "Get Started" pill), and a vibrant pink used as the single
-/// accent color for calls-to-action, prices and favorites.
+/// headings, the "Get Started" pill), and a warm gold used as the single
+/// accent color for calls-to-action, prices and links (client's Home
+/// redesign — previously a vibrant pink).
 ///
 /// Token *names* are kept the same as before (primaryNavy, gold, ...) even
 /// though the hues changed, since dozens of widgets across the app already
@@ -17,10 +18,9 @@ class AppColors {
   static const Color primaryNavy = Color(0xFF15161C);
   static const Color primaryNavyLight = Color(0xFF23242C);
 
-  // "Gold" tokens now hold the pink accent used for prices, the favorite
-  // heart, and primary CTAs like "Book Now".
-  static const Color gold = Color(0xFFFF4D8D);
-  static const Color goldLight = Color(0xFFFF8FB6);
+  // Gold accent used for prices, "View All" links and primary CTAs.
+  static const Color gold = Color(0xFFC8962E);
+  static const Color goldLight = Color(0xFFE3BE6F);
 
   static const Color scaffoldLight = Color(0xFFF4F5F9);
   static const Color scaffoldDark = Color(0xFF0E0F14);

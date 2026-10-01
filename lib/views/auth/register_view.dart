@@ -128,8 +128,8 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               'Join ${AppConstants.appName}',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 6),
@@ -137,7 +137,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
               'Create an account to save favorites and manage your enquiries.',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.75),
-                fontSize: 14,
+                fontSize: 13,
                 height: 1.4,
               ),
             ),

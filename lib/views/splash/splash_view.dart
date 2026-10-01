@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/routes/route_names.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/auth_models.dart';
@@ -14,11 +16,11 @@ import '../../widgets/glass/liquid_glass.dart';
 /// guest, no account needed) or "Login / Create Account" for people who
 /// already have — or want to start — an account.
 ///
-/// While the screen is up, [AuthController] silently checks secure storage
-/// for a saved session. If one is found and still valid, the person is
-/// already signed in ("keep me logged in") and this screen is skipped
-/// entirely — they land straight on Home once the minimum splash time has
-/// passed. Everyone else sees the two-button decision below.
+/// The native launch screen (see `main.dart`) stays up while
+/// [AuthController] silently checks secure storage for a saved session. If
+/// one is found and still valid, the person is already signed in ("keep me
+/// logged in") and this screen is never shown — they land straight on Home.
+/// Everyone else sees the two-button decision below.
 class SplashView extends ConsumerStatefulWidget {
   const SplashView({super.key});
 
@@ -32,7 +34,13 @@ class _SplashViewState extends ConsumerState<SplashView>
   late final Animation<double> _fadeIn;
   late final Animation<Offset> _slideUp;
 
-  bool _minSplashElapsed = false;
+  /// Longest the native launch screen is held while the session check runs
+  /// (it can wait on a slow profile request); after this the welcome screen
+  /// is revealed with its "checking" spinner instead.
+  static const Duration _maxNativeSplash = Duration(seconds: 4);
+
+  bool _revealed = false;
+  Timer? _revealFallback;
   bool _navigatedHome = false;
   bool _biometricUnlocked = false;
   bool _biometricPromptShown = false;
@@ -45,7 +53,7 @@ class _SplashViewState extends ConsumerState<SplashView>
     _introController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
-    )..forward();
+    );
     _fadeIn =
         CurvedAnimation(parent: _introController, curve: Curves.easeOutCubic);
     _slideUp = Tween<Offset>(
@@ -54,18 +62,23 @@ class _SplashViewState extends ConsumerState<SplashView>
     ).animate(
         CurvedAnimation(parent: _introController, curve: Curves.easeOutCubic));
 
-    // Give the splash a minimum on-screen time so it doesn't flash by
-    // instantly for already-logged-in users, even once the session check
-    // resolves faster than that.
-    Future.delayed(const Duration(milliseconds: AppConstants.splashDurationMs),
-        () {
-      if (!mounted) return;
-      setState(() => _minSplashElapsed = true);
+    _revealFallback = Timer(_maxNativeSplash, () {
+      if (mounted) setState(_reveal);
     });
+  }
+
+  /// Takes down the native launch screen and plays the entrance animation.
+  void _reveal() {
+    if (_revealed) return;
+    _revealed = true;
+    _revealFallback?.cancel();
+    FlutterNativeSplash.remove();
+    _introController.forward();
   }
 
   @override
   void dispose() {
+    _revealFallback?.cancel();
     _introController.dispose();
     super.dispose();
   }
@@ -101,29 +114,37 @@ class _SplashViewState extends ConsumerState<SplashView>
   @override
   Widget build(BuildContext context) {
     final AsyncValue<UserModel?> authState = ref.watch(authControllerProvider);
-    final bool sessionResolved = !authState.isLoading;
+    final AsyncValue<bool> biometricSettings =
+        ref.watch(biometricSettingsProvider);
+    // Wait for the Face ID setting too, so a gated session can't slip
+    // through to Home before it's known to be gated.
+    final bool sessionResolved =
+        !authState.isLoading && !biometricSettings.isLoading;
     final bool loggedIn = authState.valueOrNull != null;
-    final bool biometricGateEnabled =
-        ref.watch(biometricSettingsProvider).valueOrNull ?? false;
+    final bool biometricGateEnabled = biometricSettings.valueOrNull ?? false;
     final bool needsBiometricUnlock =
         loggedIn && biometricGateEnabled && !_biometricUnlocked;
 
     // Already logged in (and, if Face ID sign-in is enabled, already
-    // unlocked) — skip the button entirely and go straight to Home once the
-    // minimum splash time has passed.
-    if (_minSplashElapsed &&
-        sessionResolved &&
+    // unlocked) — go straight to Home. Taking the native launch screen down
+    // in the same callback means the next frame drawn is Home itself.
+    if (sessionResolved &&
         loggedIn &&
         !needsBiometricUnlock &&
         !_navigatedHome) {
       _navigatedHome = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go(RouteNames.home);
+        if (!mounted) return;
+        context.go(RouteNames.home);
+        _reveal();
+      });
+    } else if (sessionResolved && !_revealed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(_reveal);
       });
     }
 
-    if (_minSplashElapsed &&
-        sessionResolved &&
+    if (sessionResolved &&
         needsBiometricUnlock &&
         !_biometricPromptShown) {
       _biometricPromptShown = true;
@@ -132,8 +153,7 @@ class _SplashViewState extends ConsumerState<SplashView>
       });
     }
 
-    final bool showChecking = !_minSplashElapsed ||
-        !sessionResolved ||
+    final bool showChecking = !sessionResolved ||
         (loggedIn && !needsBiometricUnlock);
 
     return Scaffold(

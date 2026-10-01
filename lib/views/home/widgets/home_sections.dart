@@ -5,16 +5,16 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/guest_gate.dart';
 import '../../../core/routes/route_names.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../models/project_model.dart';
-import '../../../models/supporting_models.dart';
 import '../../../providers/content_providers.dart';
 import '../../../providers/favorites_provider.dart';
 import '../../../providers/projects_provider.dart';
+import '../../../providers/search_provider.dart';
 import '../../../widgets/common_widgets.dart';
+import '../../../widgets/developer_tile.dart';
 import '../../../widgets/loading_shimmer.dart';
-import '../../../widgets/property_card.dart';
 import 'home_header.dart';
+import 'top_property_card.dart';
 
 /// Hero carousel — the newest live listings, most-recently-updated first.
 /// (The API has no "featured" flag, so this uses the first page of the
@@ -70,22 +70,22 @@ class HeroCarousel extends ConsumerWidget {
                           project.district.name.display,
                           style: const TextStyle(
                               color: AppColors.goldLight,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           project.title.display,
                           style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700),
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text('By ${project.developer.name}',
                             style: const TextStyle(
-                                color: Colors.white70, fontSize: 13)),
+                                color: Colors.white70, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -105,72 +105,163 @@ class HeroCarousel extends ConsumerWidget {
   }
 }
 
-/// A single featured [PropertyCard] for a Home section, sourced from the
-/// loaded [projectsProvider] page(s) — plus a "See all" action that opens
-/// the full list. Mobile home screens show one hero item per section
-/// rather than a horizontally-scrolling row, so people aren't left
-/// wondering if there's more to swipe through.
-class LatestProjectsSection extends ConsumerWidget {
-  const LatestProjectsSection({super.key, required this.title, this.take = 10});
+/// Opens Listings filtered (server-side) to one of the Home area shortcuts.
+void _openHomeArea(BuildContext context, WidgetRef ref, HomeArea area) {
+  ref
+      .read(projectFilterProvider.notifier)
+      .showArea(area.districtId, area.districtName);
+  context.push(RouteNames.listings);
+}
 
-  final String title;
-  final int take;
+/// "Explore by Area" — a horizontal row of photo cards for [homeAreas].
+/// Each photo is a real project in that area ([areaCoverProvider]).
+class ExploreByAreaSection extends ConsumerWidget {
+  const ExploreByAreaSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<ProjectsPageState> pageState = ref.watch(projectsProvider);
-    final AsyncValue<Set<int>> favorites = ref.watch(favoritesProvider);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(
-          title: title,
-          actionLabel: 'See all',
-          onActionTap: () => context.push(RouteNames.listings),
+          title: 'Explore by Area',
+          actionLabel: 'View All',
+          onActionTap: () => context.push(RouteNames.areas),
         ),
-        pageState.when(
-          loading: () => const FeaturedCardShimmer(),
-          error: (Object e, StackTrace st) => Padding(
+        SizedBox(
+          height: 128,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text('Could not load projects.',
-                style: Theme.of(context).textTheme.bodyMedium),
-          ),
-          data: (ProjectsPageState state) {
-            if (state.items.isEmpty) return const SizedBox.shrink();
-            final ProjectModel project = state.items.first;
-            final Set<int> favIds = favorites.maybeWhen(
-                data: (Set<int> s) => s, orElse: () => <int>{});
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                height: 320,
-                child: PropertyCard(
-                  project: project,
-                  isFavorite: favIds.contains(project.id),
-                  onFavoriteTap: () async {
-                    if (await requireAuth(context, ref)) {
-                      ref.read(favoritesProvider.notifier).toggle(project.id);
-                    }
-                  },
-                  onTap: () => context
-                      .push(RouteNames.propertyDetailsPath(project.id)),
+            itemCount: homeAreas.length,
+            separatorBuilder: (BuildContext context, int index) =>
+                const SizedBox(width: 10),
+            itemBuilder: (BuildContext context, int index) {
+              final HomeArea area = homeAreas[index];
+              final String cover =
+                  ref.watch(areaCoverProvider(area.districtId)).valueOrNull ??
+                      '';
+              return GestureDetector(
+                onTap: () => _openHomeArea(context, ref, area),
+                child: SizedBox(
+                  width: 104,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 104,
+                          height: 96,
+                          child: AppNetworkImage(url: cover),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(area.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.color)),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ],
     );
   }
 }
 
-/// "Top Property" section for the redesigned Home — same underlying data
-/// as [LatestProjectsSection] but respects the Ready/Off-Plan pill chips
-/// above it (see [homeStatusFilterProvider]), and shows the single
-/// best-matching property rather than a scrollable row.
+/// "Popular Areas" — the first four [homeAreas] as outlined pin chips, two
+/// per row.
+class PopularAreasSection extends ConsumerWidget {
+  const PopularAreasSection({super.key});
+
+  static const List<String> _labels = <String>[
+    'Dubai Marina',
+    'Downtown Dubai',
+    'JVC',
+    'Business Bay',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ThemeData theme = Theme.of(context);
+    final List<HomeArea> areas = homeAreas
+        .where((HomeArea a) => _labels.contains(a.label))
+        .toList()
+      ..sort((HomeArea a, HomeArea b) =>
+          _labels.indexOf(a.label).compareTo(_labels.indexOf(b.label)));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SectionHeader(
+          title: 'Popular Areas',
+          actionLabel: 'View All',
+          onActionTap: () => context.push(RouteNames.areas),
+        ),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 3.8,
+          children: areas
+              .map((HomeArea area) => Material(
+                    color: theme.cardColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(color: theme.dividerColor),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _openHomeArea(context, ref, area),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: <Widget>[
+                            const Icon(Icons.location_on_outlined,
+                                size: 18, color: AppColors.gold),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(area.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme
+                                          .textTheme.titleMedium?.color)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ))
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Top Property" — respects the All / Off-Plan / Ready tabs above it (see
+/// [homeStatusFilterProvider]) and shows the single best-matching property
+/// as a [TopPropertyCard] (Home-only design).
+/// The API has no curated "featured" flag: this is the newest match (or,
+/// for Off-Plan, the soonest handover).
 class TopPropertySection extends ConsumerWidget {
-  const TopPropertySection({super.key, this.title = 'Top Property', this.take = 10});
+  const TopPropertySection(
+      {super.key, this.title = 'Top Property', this.take = 10});
 
   final String title;
   final int take;
@@ -187,7 +278,14 @@ class TopPropertySection extends ConsumerWidget {
         SectionHeader(
           title: title,
           actionLabel: 'View All',
-          onActionTap: () => context.push(RouteNames.listings),
+          // Respects whichever Ready/Off-Plan pill is active above this
+          // section — otherwise "View All" would land on the general All
+          // Properties catalog regardless of the pill.
+          // Opens the Projects tab on the matching All / Off-Plan / Ready tab.
+          onActionTap: () {
+            ref.read(projectFilterProvider.notifier).setStatus(statusFilter);
+            context.go(RouteNames.listings);
+          },
         ),
         pageState.when(
           loading: () => const FeaturedCardShimmer(),
@@ -200,7 +298,8 @@ class TopPropertySection extends ConsumerWidget {
             final List<ProjectModel> matches = statusFilter == null
                 ? state.items
                 : state.items
-                    .where((ProjectModel p) => p.propertyStatusCode == statusFilter)
+                    .where((ProjectModel p) =>
+                        p.propertyStatusCode == statusFilter)
                     .toList();
             // Off-Plan: soonest handover first. Ready (and "All Projects"):
             // left in the API's own newest-added-first order.
@@ -214,7 +313,8 @@ class TopPropertySection extends ConsumerWidget {
               // "nothing here", since a match will very likely show up.
               if (state.isSearchingDeeper) return const FeaturedCardShimmer();
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Text('No properties match this filter yet.',
                     style: Theme.of(context).textTheme.bodyMedium),
               );
@@ -224,19 +324,16 @@ class TopPropertySection extends ConsumerWidget {
                 data: (Set<int> s) => s, orElse: () => <int>{});
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                height: 320,
-                child: PropertyCard(
-                  project: project,
-                  isFavorite: favIds.contains(project.id),
-                  onFavoriteTap: () async {
-                    if (await requireAuth(context, ref)) {
-                      ref.read(favoritesProvider.notifier).toggle(project.id);
-                    }
-                  },
-                  onTap: () => context
-                      .push(RouteNames.propertyDetailsPath(project.id)),
-                ),
+              child: TopPropertyCard(
+                project: project,
+                isFavorite: favIds.contains(project.id),
+                onFavoriteTap: () async {
+                  if (await requireAuth(context, ref)) {
+                    ref.read(favoritesProvider.notifier).toggle(project.id);
+                  }
+                },
+                onTap: () =>
+                    context.push(RouteNames.propertyDetailsPath(project.id)),
               ),
             );
           },
@@ -246,12 +343,11 @@ class TopPropertySection extends ConsumerWidget {
   }
 }
 
-/// "Developers We Work With" — derived from loaded projects, shown as a
-/// wrapping grid of chips rather than a horizontal scroller so everything
-/// is visible at a glance on a phone screen. Tapping a chip filters the
-/// Listings screen to that developer. Collapsed to [_collapsedCount] chips
-/// initially with a "Read More" toggle, since the full list can run to
-/// dozens of developers.
+/// "Developers We Work With" — a 4-column grid of logo + name cards from
+/// the `/developers` directory (the client's featured developers first —
+/// see [featuredDeveloperIds]). Tapping one opens that developer's page.
+/// Home shows the first [_homeCount]; "See All" opens the full, searchable
+/// [DevelopersView] (the directory runs to ~800 developers).
 class DevelopersSection extends ConsumerStatefulWidget {
   const DevelopersSection({super.key});
 
@@ -260,8 +356,7 @@ class DevelopersSection extends ConsumerStatefulWidget {
 }
 
 class _DevelopersSectionState extends ConsumerState<DevelopersSection> {
-  static const int _collapsedCount = 8;
-  bool _expanded = false;
+  static const int _homeCount = 12;
 
   @override
   Widget build(BuildContext context) {
@@ -270,468 +365,37 @@ class _DevelopersSectionState extends ConsumerState<DevelopersSection> {
     return developers.maybeWhen(
       data: (List<DeveloperModel> list) {
         if (list.isEmpty) return const SizedBox.shrink();
-        final bool canCollapse = list.length > _collapsedCount;
-        final List<DeveloperModel> visible =
-            _expanded || !canCollapse ? list : list.take(_collapsedCount).toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const SectionHeader(title: 'Developers We Work With'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: visible
-                    .map((DeveloperModel developer) => InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => context
-                              .push(RouteNames.developerDetailsPath(developer.id)),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.divider),
-                            ),
-                            child: Text(
-                              developer.name,
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-            if (canCollapse)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: TextButton(
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(_expanded ? 'Show Less' : 'Read More'),
-                ),
-              ),
-          ],
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// "Explore Prime Locations" — derived areas (grouped by district) from
-/// loaded projects.
-class AreasSection extends ConsumerWidget {
-  const AreasSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<List<AreaModel>> areas = ref.watch(areasProvider);
-    return areas.maybeWhen(
-      data: (List<AreaModel> list) {
-        if (list.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             SectionHeader(
-              title: 'Explore Prime Locations',
-              actionLabel: 'View more',
-              onActionTap: () => context.push(RouteNames.areas),
+              title: 'Developers We Work With',
+              actionLabel: list.length > _homeCount ? 'See All' : null,
+              onActionTap: list.length > _homeCount
+                  ? () => context.push(RouteNames.developers)
+                  : null,
             ),
-            Padding(
+            GridView.count(
+              crossAxisCount: 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GestureDetector(
-                onTap: () => context
-                    .push(RouteNames.areaDetailsPath(list.first.districtId)),
-                child: SizedBox(
-                  height: 180,
-                  width: double.infinity,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        AppNetworkImage(url: list.first.coverImage),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: <Color>[
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.72)
-                              ],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 16,
-                          right: 16,
-                          bottom: 14,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                list.first.name,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${list.first.projectCount} Projects',
-                                style: const TextStyle(
-                                    color: AppColors.goldLight, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.0,
+              children: list
+                  .take(_homeCount)
+                  .map((DeveloperModel developer) => DeveloperTile(
+                        developer: developer,
+                        onTap: () => context.push(
+                            RouteNames.developerDetailsPath(developer.id)),
+                      ))
+                  .toList(),
             ),
           ],
         );
       },
       orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// "Why Choose Us" three-point pitch — shown as stacked icon feature
-/// cards (colored icon badge + title + description inside a rounded
-/// card), the pattern mobile apps use instead of a website-style
-/// checklist.
-class WhyChooseSection extends StatelessWidget {
-  const WhyChooseSection({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    const List<(IconData, String, String)> points = <(IconData, String, String)>[
-      (
-        Icons.insights_rounded,
-        'Market Expertise',
-        'In-depth knowledge of the Dubai real estate market, helping you find the ideal property.'
-      ),
-      (
-        Icons.home_work_rounded,
-        'Comprehensive Services',
-        'From buying and selling to leasing and full property management.'
-      ),
-      (
-        Icons.handshake_rounded,
-        'Client-Centered Approach',
-        'Transparent advice, personalized support, and exceptional service.'
-      ),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const SectionHeader(title: 'Why Choose Us'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: points
-                .map(((IconData, String, String) p) => Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Container(
-                            width: 44,
-                            height: 44,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: AppColors.gold.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(p.$1, color: AppColors.gold, size: 22),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(p.$2,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 4),
-                                Text(p.$3,
-                                    style:
-                                        Theme.of(context).textTheme.bodyMedium),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ))
-                .toList(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// "The Trust We've Earned" testimonials — a swipeable single-card
-/// PageView with a page-dot indicator, the mobile-native pattern for
-/// browsing a handful of reviews one at a time (mock-backed — no live
-/// endpoint for reviews yet).
-class TestimonialsSection extends ConsumerStatefulWidget {
-  const TestimonialsSection({super.key});
-
-  @override
-  ConsumerState<TestimonialsSection> createState() => _TestimonialsSectionState();
-}
-
-class _TestimonialsSectionState extends ConsumerState<TestimonialsSection> {
-  final PageController _controller = PageController(viewportFraction: 0.92);
-  int _page = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AsyncValue<List<TestimonialModel>> testimonials =
-        ref.watch(testimonialsProvider);
-    return testimonials.maybeWhen(
-      data: (List<TestimonialModel> list) {
-        if (list.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const SectionHeader(title: 'The Trust We\'ve Earned'),
-            SizedBox(
-              height: 176,
-              child: PageView.builder(
-                controller: _controller,
-                itemCount: list.length,
-                onPageChanged: (int index) => setState(() => _page = index),
-                itemBuilder: (BuildContext context, int index) {
-                  final TestimonialModel t = list[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor:
-                                    AppColors.primaryNavy.withValues(alpha: 0.08),
-                                child: Text(
-                                  t.author.isNotEmpty ? t.author[0].toUpperCase() : '?',
-                                  style: const TextStyle(
-                                      color: AppColors.primaryNavy,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    Text(t.author,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium
-                                            ?.copyWith(fontWeight: FontWeight.w700)),
-                                    Row(
-                                      children: List<Widget>.generate(
-                                        t.rating,
-                                        (int i) => const Icon(Icons.star,
-                                            size: 13, color: AppColors.gold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(t.postedAgo,
-                                  style: Theme.of(context).textTheme.labelSmall),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Expanded(
-                            child: Text(
-                              t.review,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (list.length > 1) ...<Widget>[
-              const SizedBox(height: 10),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List<Widget>.generate(list.length, (int index) {
-                    final bool active = index == _page;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: active ? 18 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: active
-                            ? AppColors.gold
-                            : AppColors.divider,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ],
-          ],
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// "Latest Blogs" preview section (mock-backed — no live endpoint yet) —
-/// rounded card rows with a thumbnail, title, and a small read-time pill
-/// instead of a plain default ListTile.
-class BlogsSection extends ConsumerWidget {
-  const BlogsSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<List<BlogModel>> blogs = ref.watch(blogsProvider);
-    return blogs.maybeWhen(
-      data: (List<BlogModel> list) {
-        if (list.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            SectionHeader(
-              title: 'Latest Blogs',
-              actionLabel: 'View all',
-              onActionTap: () => context.push(RouteNames.blogs),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: list
-                    .take(3)
-                    .map((BlogModel blog) => _BlogCard(blog: blog))
-                    .toList(),
-              ),
-            ),
-          ],
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-class _BlogCard extends StatelessWidget {
-  const _BlogCard({required this.blog});
-  final BlogModel blog;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push(RouteNames.blogDetailsPath(blog.id)),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: AppNetworkImage(url: blog.coverImage),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      blog.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: <Widget>[
-                        Icon(Icons.schedule_rounded,
-                            size: 13, color: AppColors.textSecondaryLight),
-                        const SizedBox(width: 4),
-                        Text('${blog.readMinutes} Min Read',
-                            style: Theme.of(context).textTheme.labelSmall),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            Formatters.fullDate(blog.publishedAt),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

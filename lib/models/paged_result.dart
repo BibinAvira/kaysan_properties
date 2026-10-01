@@ -1,6 +1,6 @@
 /// Generic wrapper for the API's pagination envelope:
 /// `{ count, next, previous, results: [...] }` (standard DRF-style
-/// pagination, as returned by the X-OPP Partner API).
+/// pagination, as returned by Reelly's `/projects` list endpoint).
 ///
 /// Kept generic (`PagedResult<T>`) so it can wrap any paginated resource,
 /// not just properties, if the API grows more list endpoints later.

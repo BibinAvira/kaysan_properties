@@ -6,11 +6,11 @@ import '../../views/areas/areas_view.dart';
 import '../../views/auth/login_view.dart';
 import '../../views/auth/profile_view.dart';
 import '../../views/auth/register_view.dart';
-import '../../views/blogs/blogs_view.dart';
 import '../../views/calculator/calculator_view.dart';
 import '../../views/common/common_views.dart';
 import '../../views/contact/contact_view.dart';
 import '../../views/developers/developer_details_view.dart';
+import '../../views/developers/developers_view.dart';
 import '../../views/favorites/favorites_view.dart';
 import '../../views/home/home_view.dart';
 import '../../views/legal/legal_views.dart';
@@ -24,36 +24,63 @@ import 'route_names.dart';
 
 /// Root navigation graph. A [StatefulShellRoute] hosts the four bottom-nav
 /// tabs (Home / Listings / Favorites / More), each keeping its own stack;
-/// everything else (Property Details, Search, Areas, Blogs, Contact, Legal)
+/// everything else (Property Details, Search, Areas, Contact, Legal)
 /// is pushed on top via ordinary [GoRoute]s so it covers the bottom nav.
 final GoRouter appRouter = GoRouter(
   initialLocation: RouteNames.splash,
   errorBuilder: (BuildContext context, GoRouterState state) =>
       AppErrorView(message: 'Page not found: ${state.uri}'),
   routes: <RouteBase>[
-    GoRoute(path: RouteNames.splash, builder: (BuildContext context, GoRouterState state) => const SplashView()),
+    GoRoute(
+        path: RouteNames.splash,
+        builder: (BuildContext context, GoRouterState state) =>
+            const SplashView()),
     StatefulShellRoute.indexedStack(
-      builder: (BuildContext context, GoRouterState state, StatefulNavigationShell navigationShell) {
+      builder: (BuildContext context, GoRouterState state,
+          StatefulNavigationShell navigationShell) {
         return MainShell(navigationShell: navigationShell);
       },
       branches: <StatefulShellBranch>[
         StatefulShellBranch(routes: <RouteBase>[
-          GoRoute(path: RouteNames.home, builder: (BuildContext context, GoRouterState state) => const HomeView()),
+          GoRoute(
+              path: RouteNames.home,
+              builder: (BuildContext context, GoRouterState state) =>
+                  const HomeView()),
         ]),
         StatefulShellBranch(routes: <RouteBase>[
-          GoRoute(path: RouteNames.listings, builder: (BuildContext context, GoRouterState state) => const ListingsView()),
+          GoRoute(
+              path: RouteNames.listings,
+              builder: (BuildContext context, GoRouterState state) =>
+                  const ListingsView()),
         ]),
         StatefulShellBranch(routes: <RouteBase>[
-          GoRoute(path: RouteNames.favorites, builder: (BuildContext context, GoRouterState state) => const FavoritesView()),
+          GoRoute(
+              path: RouteNames.favorites,
+              builder: (BuildContext context, GoRouterState state) =>
+                  const FavoritesView()),
         ]),
         StatefulShellBranch(routes: <RouteBase>[
-          GoRoute(path: '/more', builder: (BuildContext context, GoRouterState state) => const MoreView()),
+          GoRoute(
+              path: '/more',
+              builder: (BuildContext context, GoRouterState state) =>
+                  const MoreView()),
         ]),
       ],
     ),
     GoRoute(
       path: RouteNames.search,
-      builder: (BuildContext context, GoRouterState state) => const SearchView(),
+      builder: (BuildContext context, GoRouterState state) =>
+          const SearchView(),
+    ),
+    GoRoute(
+      path: RouteNames.offPlan,
+      builder: (BuildContext context, GoRouterState state) =>
+          const ListingsView(propertyStatusCode: 2),
+    ),
+    GoRoute(
+      path: RouteNames.ready,
+      builder: (BuildContext context, GoRouterState state) =>
+          const ListingsView(propertyStatusCode: 1),
     ),
     GoRoute(
       path: RouteNames.propertyDetails,
@@ -74,21 +101,15 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: RouteNames.developers,
+      builder: (BuildContext context, GoRouterState state) =>
+          const DevelopersView(),
+    ),
+    GoRoute(
       path: RouteNames.developerDetails,
       builder: (BuildContext context, GoRouterState state) {
         final int id = int.parse(state.pathParameters['id']!);
         return DeveloperDetailsView(developerId: id);
-      },
-    ),
-    GoRoute(
-      path: RouteNames.blogs,
-      builder: (BuildContext context, GoRouterState state) => const BlogsView(),
-    ),
-    GoRoute(
-      path: RouteNames.blogDetails,
-      builder: (BuildContext context, GoRouterState state) {
-        final int id = int.parse(state.pathParameters['id']!);
-        return BlogDetailsView(blogId: id);
       },
     ),
     GoRoute(
@@ -98,11 +119,26 @@ final GoRouter appRouter = GoRouter(
         return CalculatorView(initialPrice: initialPrice);
       },
     ),
-    GoRoute(path: RouteNames.contact, builder: (BuildContext context, GoRouterState state) => const ContactView()),
-    GoRoute(path: RouteNames.about, builder: (BuildContext context, GoRouterState state) => const AboutView()),
-    GoRoute(path: RouteNames.privacyPolicy, builder: (BuildContext context, GoRouterState state) => const PrivacyPolicyView()),
-    GoRoute(path: RouteNames.terms, builder: (BuildContext context, GoRouterState state) => const TermsView()),
-    GoRoute(path: RouteNames.noInternet, builder: (BuildContext context, GoRouterState state) => const NoInternetView()),
+    GoRoute(
+        path: RouteNames.contact,
+        builder: (BuildContext context, GoRouterState state) =>
+            const ContactView()),
+    GoRoute(
+        path: RouteNames.about,
+        builder: (BuildContext context, GoRouterState state) =>
+            const AboutView()),
+    GoRoute(
+        path: RouteNames.privacyPolicy,
+        builder: (BuildContext context, GoRouterState state) =>
+            const PrivacyPolicyView()),
+    GoRoute(
+        path: RouteNames.terms,
+        builder: (BuildContext context, GoRouterState state) =>
+            const TermsView()),
+    GoRoute(
+        path: RouteNames.noInternet,
+        builder: (BuildContext context, GoRouterState state) =>
+            const NoInternetView()),
     GoRoute(
       path: RouteNames.login,
       builder: (BuildContext context, GoRouterState state) =>
@@ -110,15 +146,18 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: RouteNames.register,
-      builder: (BuildContext context, GoRouterState state) => const RegisterView(),
+      builder: (BuildContext context, GoRouterState state) =>
+          const RegisterView(),
     ),
     GoRoute(
       path: RouteNames.profile,
-      builder: (BuildContext context, GoRouterState state) => const ProfileView(),
+      builder: (BuildContext context, GoRouterState state) =>
+          const ProfileView(),
     ),
   ],
 );
 
 /// Riverpod provider so the router can later be made reactive to auth
 /// state (e.g. via `refreshListenable`) without changing call sites.
-final Provider<GoRouter> appRouterProvider = Provider<GoRouter>((Ref ref) => appRouter);
+final Provider<GoRouter> appRouterProvider =
+    Provider<GoRouter>((Ref ref) => appRouter);

@@ -26,8 +26,8 @@ class AboutView extends StatelessWidget {
                 const Text(AppConstants.appName,
                     style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700)),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Text('Your Partner in Dubai Real Estate Investment',
                     style: const TextStyle(color: AppColors.goldLight)),

@@ -14,14 +14,13 @@ import '../../widgets/loading_shimmer.dart';
 import '../../widgets/property_card.dart';
 import 'widgets/filter_sheet.dart';
 
-/// Property Listings screen — the full catalog with search bar, filter
-/// sheet, and an infinite-scrolling grid of [PropertyCard]s. Scrolling
-/// near the bottom triggers [ProjectsController.loadMore], which follows
-/// the API's own `next_page_url` rather than guessing page numbers.
+/// Property Listings screen — the full ranked catalogue (Best Match order
+/// by default) with search bar, filter sheet, and a grid of
+/// [PropertyCard]s. Everything is filtered on-device — see
+/// [filteredProjectsProvider].
 ///
-/// All / Off-Plan / Ready tabs under the search bar narrow it by status
-/// (server-side — see [ProjectFilter.statusCode]); the title follows the
-/// tab. Opened with [propertyStatusCode], it starts on that tab.
+/// All / Off-Plan / Ready tabs under the search bar narrow it by status;
+/// the title follows the tab. Opened with [propertyStatusCode], it starts on that tab.
 class ListingsView extends ConsumerStatefulWidget {
   const ListingsView({super.key, this.propertyStatusCode});
 
@@ -38,7 +37,6 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     final int? start = widget.propertyStatusCode;
     if (start != null) {
       WidgetsBinding.instance.addPostFrameCallback(
@@ -54,44 +52,14 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    final double threshold = _scrollController.position.maxScrollExtent - 400;
-    if (_scrollController.position.pixels >= threshold) {
-      final FilteredProjectsController filtered =
-          ref.read(filteredProjectsProvider.notifier);
-      // A region/area filter pages its own server-filtered results rather than
-      // the general feed — see FilteredProjectsController.isServerPaged.
-      if (filtered.isServerPaged) {
-        filtered.loadMore();
-      } else {
-        ref.read(projectsProvider.notifier).loadMore();
-      }
-    }
-  }
-
-  /// Refreshes both the general feed and — since [FilteredProjectsController]
-  /// doesn't watch [projectsProvider] at all while a search/developer/
-  /// district filter is active (it queries the server directly instead) —
-  /// the filtered result set too. Refreshing only [projectsProvider] would
-  /// silently do nothing visible whenever a filter/search is applied.
+  /// Pull-to-refresh: re-downloads the catalogue; [filteredProjectsProvider]
+  /// re-derives from it.
   Future<void> _refresh() async {
     await ref.read(projectsProvider.notifier).refresh();
-    ref.invalidate(filteredProjectsProvider);
-    try {
-      // Awaited only so the pull-to-refresh spinner stays visible until the
-      // re-fetch actually finishes; any failure already surfaces through
-      // `filtered.when`'s error branch once the provider rebuilds, so it's
-      // swallowed here rather than crashing the refresh gesture.
-      await ref.read(filteredProjectsProvider.future);
-    } catch (_) {
-      // Ignored — see above.
-    }
   }
 
   @override
@@ -100,32 +68,10 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
         ref.watch(filteredProjectsProvider);
     final ProjectFilter filter = ref.watch(projectFilterProvider);
     final AsyncValue<Set<int>> favorites = ref.watch(favoritesProvider);
-    final ProjectsPageState? pageState =
-        ref.watch(projectsProvider).valueOrNull;
-    final FilteredProjectsController filteredController =
-        ref.read(filteredProjectsProvider.notifier);
-    final bool serverPaged = filteredController.isServerPaged;
-    final bool isLoadingMore = serverPaged
-        ? filteredController.serverIsLoadingMore
-        : pageState?.isLoadingMore ?? false;
-    final bool hasMore = serverPaged
-        ? filteredController.serverHasMore
-        : pageState?.hasMore ?? false;
-
-    // Only the unscoped "All Properties" catalog shows a headline count —
-    // the API's own reported total while browsing unfiltered (so it isn't
-    // capped at whatever page has loaded so far), or the live match count
-    // once a search/filter narrows it down.
-    final bool isUnfiltered =
-        !filter.hasActiveFilters && filter.debouncedQuery.trim().isEmpty;
-    // Region/area (+ developer) alone is filtered entirely server-side, so the
-    // server's total is the real count even before every page has loaded.
-    final bool serverOnly = serverPaged && filter.districtId == null;
-    final int? count = isUnfiltered
-            ? pageState?.totalCount
-            : serverOnly
-                ? filteredController.serverTotalCount
-                : filtered.valueOrNull?.length;
+    // On a first launch only a preview page is shown while the full
+    // catalogue downloads — say so instead of "end of the list".
+    final bool isLoadingCatalog =
+        ref.watch(projectsProvider).valueOrNull?.isLoadingCatalog ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -241,12 +187,12 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
                     // Center/Column) doesn't provide one, which is why
                     // refresh silently did nothing whenever the list (or
                     // a search/filter) came back empty.
+                    if (isLoadingCatalog) return const PropertyGridShimmer();
                     return _scrollableEmptyState(
                       const EmptyStateView(
                         icon: Icons.search_off,
                         title: 'No properties found',
-                        message:
-                            'Try adjusting your search or filters, or keep scrolling to load more.',
+                        message: 'Try adjusting your search or filters.',
                       ),
                     );
                   }
@@ -287,10 +233,10 @@ class _ListingsViewState extends ConsumerState<ListingsView> {
                           ),
                         ),
                       ),
-                      if (isLoadingMore)
+                      if (isLoadingCatalog)
                         const SliverToBoxAdapter(
                             child: PaginationFooterLoader())
-                      else if (!hasMore)
+                      else
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 20),

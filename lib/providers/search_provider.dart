@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/paged_result.dart';
 import '../models/project_model.dart';
 import '../repositories/projects_repository.dart';
 import 'di_providers.dart';
@@ -102,6 +101,12 @@ class ProjectFilterController extends Notifier<ProjectFilter> {
 
   void setSort(ProjectSort sort) => state = state.copyWith(sort: sort);
 
+  /// Handover date range from the filter sheet; both null clears it.
+  void setHandoverRange(DateTime? from, DateTime? to) => state = state.copyWith(
+      handoverFrom: from,
+      handoverTo: to,
+      clearHandover: from == null && to == null);
+
   void clearAll() => state =
       ProjectFilter(query: state.query, debouncedQuery: state.debouncedQuery);
   void reset() => state = const ProjectFilter();
@@ -112,127 +117,15 @@ final NotifierProvider<ProjectFilterController, ProjectFilter>
     NotifierProvider<ProjectFilterController, ProjectFilter>(
         ProjectFilterController.new);
 
-/// Drives the Listings/Search screens' result list.
-///
-/// When [ProjectFilter.hasServerSearch] is true (free text entered), this
-/// calls [ProjectsRepository.searchProjects] directly — the server matches
-/// against its *entire* catalog, not just whatever pages of the general
-/// feed happen to be loaded.
-///
-/// A district/developer pick has no reliable server-side equivalent on
-/// this API (see [ProjectsRepository]'s class doc), so it instead triggers
-/// [ProjectsController.loadAll] to pull in the rest of the catalog first —
-/// otherwise picking e.g. a district whose projects are scattered past
-/// page 1 would only ever show whichever one happened to already be
-/// loaded — then narrows the now-complete feed locally via
-/// [ProjectsRepository.applyFilter], same as plain price/sort filtering.
-///
-/// A region or Home area pick *is* filtered server-side (`region=` /
-/// `districts=`, plus `developer=` if one is also picked), and paged: [loadMore] fetches the next page as
-/// the list scrolls, since e.g. Dubai alone is ~1,500 projects — see
-/// [isServerPaged].
-class FilteredProjectsController extends AsyncNotifier<List<ProjectModel>> {
-  List<ProjectModel> _serverItems = <ProjectModel>[];
-  String? _serverNextUrl;
-  int _serverTotal = 0;
-  bool _serverLoadingMore = false;
-  bool _serverPaged = false;
-
-  /// Bumped on every [build], so a [loadMore] that finishes after the
-  /// filter changed can tell its page is stale.
-  int _generation = 0;
-
-  /// Whether the current results come from a server-side region/area filter,
-  /// paged via [loadMore] rather than [ProjectsController.loadMore].
-  bool get isServerPaged => _serverPaged;
-  bool get serverHasMore => _serverNextUrl != null;
-  bool get serverIsLoadingMore => _serverLoadingMore;
-
-  /// The server's total match count for the region/area (+ developer) filter —
-  /// not capped at whatever pages have loaded so far.
-  int get serverTotalCount => _serverTotal;
-
-  @override
-  Future<List<ProjectModel>> build() async {
-    final ProjectFilter filter = ref.watch(projectFilterProvider);
-    final ProjectsRepository repo = ref.watch(projectsRepositoryProvider);
-    _generation++;
-    _serverPaged = false;
-    _serverNextUrl = null;
-    _serverLoadingMore = false;
-
-    if (filter.hasServerSearch) {
-      // Name, developer and area matches, fetched with the active tab and
-      // filters — see [ProjectsRepository.searchCatalog].
-      final List<ProjectModel> found =
-          await repo.searchCatalog(filter.debouncedQuery, filter);
-      return repo.applyFilter(found, filter);
-    }
-
-    if (filter.hasServerFacet) {
-      PagedResult<ProjectModel> page = await repo.getServerFilteredFirstPage(
-          region: filter.region,
-          districtId: filter.areaId,
-          developerId: filter.developerId,
-          minPrice: filter.minPrice,
-          maxPrice: filter.maxPrice,
-          statusCode: filter.statusCode,
-          sort: filter.sort);
-      final List<ProjectModel> items = <ProjectModel>[...page.items];
-      // A district is matched client-side, so it needs the region's
-      // whole result set — same reasoning as the loadAll() below.
-      while (filter.districtId != null && page.nextPageUrl != null) {
-        page = await repo.getNextPage(page.nextPageUrl!);
-        items.addAll(page.items);
-      }
-      _serverItems = items;
-      _serverNextUrl = page.nextPageUrl;
-      _serverTotal = page.count;
-      _serverPaged = true;
-      return repo.applyFilter(items, filter);
-    }
-
-    if (filter.districtId != null || filter.developerId != null) {
-      await ref.read(projectsProvider.notifier).loadAll();
-    }
-
-    final ProjectsPageState pageState =
-        await ref.watch(projectsProvider.future);
-    return repo.applyFilter(pageState.items, filter);
-  }
-
-  /// Appends the next server page of region/area results. No-op outside
-  /// [isServerPaged] mode, or while a page is already loading.
-  Future<void> loadMore() async {
-    final String? next = _serverNextUrl;
-    if (!_serverPaged || next == null || _serverLoadingMore) return;
-    final int generation = _generation;
-    final ProjectsRepository repo = ref.read(projectsRepositoryProvider);
-    final ProjectFilter filter = ref.read(projectFilterProvider);
-    _serverLoadingMore = true;
-    // New list instance so listeners rebuild and show the footer loader.
-    state = AsyncValue<List<ProjectModel>>.data(
-        <ProjectModel>[...state.valueOrNull ?? <ProjectModel>[]]);
-    PagedResult<ProjectModel>? page;
-    try {
-      page = await repo.getNextPage(next);
-    } catch (_) {
-      // Keep what's loaded; the next scroll retries this same page.
-    }
-    // The filter changed (build() re-ran) while this page loaded — its
-    // results, and the loading flag, belong to that newer build now.
-    if (generation != _generation) return;
-    if (page != null) {
-      _serverItems = <ProjectModel>[..._serverItems, ...page.items];
-      _serverNextUrl = page.nextPageUrl;
-    }
-    _serverLoadingMore = false;
-    state = AsyncValue<List<ProjectModel>>.data(
-        repo.applyFilter(_serverItems, filter));
-  }
-}
-
-final AsyncNotifierProvider<FilteredProjectsController, List<ProjectModel>>
-    filteredProjectsProvider =
-    AsyncNotifierProvider<FilteredProjectsController, List<ProjectModel>>(
-        FilteredProjectsController.new);
+/// The Listings/Search result list: the ranked catalogue narrowed and
+/// ordered by [projectFilterProvider], entirely on-device (see
+/// [ProjectsRepository.applyFilter]) — so every filter covers every
+/// project and re-runs instantly.
+final FutureProvider<List<ProjectModel>> filteredProjectsProvider =
+    FutureProvider<List<ProjectModel>>((Ref ref) async {
+  final ProjectFilter filter = ref.watch(projectFilterProvider);
+  final ProjectsPageState catalog = await ref.watch(projectsProvider.future);
+  return ref
+      .watch(projectsRepositoryProvider)
+      .applyFilter(catalog.items, filter, catalog.engine);
+});

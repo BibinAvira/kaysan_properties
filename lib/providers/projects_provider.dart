@@ -1,152 +1,90 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/paged_result.dart';
 import '../models/project_model.dart';
+import '../repositories/projects_repository.dart';
+import '../repositories/ranking_engine.dart';
 import 'di_providers.dart';
 import 'guest_session_provider.dart';
 
-/// State for the paginated property list: everything loaded so far, plus
-/// enough bookkeeping to drive infinite scroll (whether another page
-/// exists, and whether one is currently being fetched).
+/// The browsable catalogue: every listable project in Best Match order
+/// (see [RankingEngine]), and the [engine] that ranked it.
 class ProjectsPageState {
   const ProjectsPageState({
-    this.items = const <ProjectModel>[],
-    this.nextPageUrl,
-    this.isLoadingMore = false,
-    this.isSearchingDeeper = false,
-    this.totalCount = 0,
+    required this.items,
+    required this.engine,
+    this.isLoadingCatalog = false,
   });
 
   final List<ProjectModel> items;
-  final String? nextPageUrl;
-  final bool isLoadingMore;
+  final RankingEngine engine;
 
-  /// True while [ProjectsController.loadUntilMatch] is fetching additional
-  /// pages on the caller's behalf (e.g. a search/filter that found nothing
-  /// in what's loaded so far) — distinct from [isLoadingMore] so the UI can
-  /// show "still searching…" rather than the plain scroll-pagination
-  /// footer, or an empty state, while this is happening.
-  final bool isSearchingDeeper;
-  final int totalCount;
+  /// True while only the first-launch preview page is shown and the full
+  /// catalogue is still downloading — screens show a "loading more" state
+  /// instead of a final "nothing found".
+  final bool isLoadingCatalog;
 
-  bool get hasMore => nextPageUrl != null;
-
-  ProjectsPageState copyWith({
-    List<ProjectModel>? items,
-    String? nextPageUrl,
-    bool clearNextPage = false,
-    bool? isLoadingMore,
-    bool? isSearchingDeeper,
-    int? totalCount,
-  }) {
-    return ProjectsPageState(
-      items: items ?? this.items,
-      nextPageUrl: clearNextPage ? null : (nextPageUrl ?? this.nextPageUrl),
-      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      isSearchingDeeper: isSearchingDeeper ?? this.isSearchingDeeper,
-      totalCount: totalCount ?? this.totalCount,
-    );
-  }
+  int get totalCount => items.length;
 }
 
-/// Drives the Listings/Home screens: loads page 1 on build, and appends
-/// further pages via [loadMore] as the user scrolls — following the API's
-/// own `next_page_url` rather than guessing query params.
+/// Loads the ranked catalogue, cache-first:
+///  * a saved catalogue is shown immediately, and re-downloaded in the
+///    background once older than [CatalogCache.maxAge];
+///  * with none (first launch), a quick preview page is shown while the
+///    full catalogue downloads, then swapped for it.
 class ProjectsController extends AsyncNotifier<ProjectsPageState> {
+  bool _downloading = false;
+
   @override
   Future<ProjectsPageState> build() async {
-    final PagedResult<ProjectModel> page = await ref.watch(projectsRepositoryProvider).getFirstPage();
-    return ProjectsPageState(items: page.items, nextPageUrl: page.nextPageUrl, totalCount: page.count);
+    final ProjectsRepository repo = ref.watch(projectsRepositoryProvider);
+    final ({RankedCatalog catalog, bool isStale})? cached =
+        await repo.readCachedCatalog();
+    if (cached != null) {
+      if (cached.isStale) unawaited(_downloadInBackground());
+      return _stateOf(cached.catalog);
+    }
+    unawaited(_downloadInBackground());
+    return _stateOf(await repo.getPreviewPage(), loading: true);
   }
 
-  Future<void> loadMore() async {
-    final ProjectsPageState? current = state.valueOrNull;
-    if (current == null || !current.hasMore || current.isLoadingMore) return;
+  ProjectsPageState _stateOf(RankedCatalog c, {bool loading = false}) =>
+      ProjectsPageState(
+          items: c.items, engine: c.engine, isLoadingCatalog: loading);
 
-    state = AsyncValue<ProjectsPageState>.data(current.copyWith(isLoadingMore: true));
+  Future<void> _downloadInBackground() async {
+    if (_downloading) return;
+    _downloading = true;
     try {
-      final PagedResult<ProjectModel> page =
-          await ref.read(projectsRepositoryProvider).getNextPage(current.nextPageUrl!);
-      state = AsyncValue<ProjectsPageState>.data(
-        current.copyWith(
-          items: <ProjectModel>[...current.items, ...page.items],
-          nextPageUrl: page.nextPageUrl,
-          clearNextPage: page.nextPageUrl == null,
-          isLoadingMore: false,
-          totalCount: page.count,
-        ),
-      );
-    } catch (_) {
-      // Keep existing items visible; just stop showing the loading footer.
-      // The user can retry by scrolling again (loadMore is idempotent).
-      state = AsyncValue<ProjectsPageState>.data(current.copyWith(isLoadingMore: false));
-    }
-  }
-
-  /// Keeps fetching further pages — via the same [loadMore] used for
-  /// scroll-driven pagination — until [hasMatch] is true against the items
-  /// loaded so far, or the catalog is exhausted (or [maxPages] extra pages
-  /// have been fetched, as a safety cap against a search term that matches
-  /// nothing anywhere in a ~1800-property catalog).
-  ///
-  /// Free-text search does have a reliable server-side param on this API
-  /// (`search=`, resolved against the entire catalog — see
-  /// [ProjectsRepository.searchProjects]), but district/developer/status
-  /// facet filters don't, so those still only ever run client-side over
-  /// whatever pages have already been fetched — without this, a real match
-  /// sitting on page 5 looks identical to "no such property" if only page
-  /// 1 has loaded.
-  Future<void> loadUntilMatch(
-    bool Function(List<ProjectModel> items) hasMatch, {
-    int maxPages = 40,
-  }) async {
-    if (hasMatch(state.valueOrNull?.items ?? const <ProjectModel>[])) return;
-
-    final ProjectsPageState? initial = state.valueOrNull;
-    if (initial != null) {
-      state = AsyncValue<ProjectsPageState>.data(initial.copyWith(isSearchingDeeper: true));
-    }
-    try {
-      for (int i = 0; i < maxPages; i++) {
-        final ProjectsPageState? current = state.valueOrNull;
-        if (current == null || hasMatch(current.items) || !current.hasMore) return;
-        await loadMore();
+      final RankedCatalog full =
+          await ref.read(projectsRepositoryProvider).downloadCatalog();
+      state = AsyncValue<ProjectsPageState>.data(_stateOf(full));
+    } catch (e) {
+      // Keep whatever is shown (cache or preview); the next launch or
+      // pull-to-refresh retries.
+      debugPrint('Catalogue download failed: $e');
+      final ProjectsPageState? current = state.valueOrNull;
+      if (current != null && current.isLoadingCatalog) {
+        state = AsyncValue<ProjectsPageState>.data(ProjectsPageState(
+            items: current.items, engine: current.engine));
       }
     } finally {
-      final ProjectsPageState? finalState = state.valueOrNull;
-      if (finalState != null) {
-        state = AsyncValue<ProjectsPageState>.data(finalState.copyWith(isSearchingDeeper: false));
-      }
+      _downloading = false;
     }
   }
 
-  /// Fetches every remaining page (bounded by [maxPages] as a safety cap)
-  /// rather than stopping at the first match — used by the Developer
-  /// Details page, which needs to show *all* of that developer's projects,
-  /// not just whichever one happened to be loaded first.
-  Future<void> loadAll({int maxPages = 40}) async {
-    final ProjectsPageState? initial = state.valueOrNull;
-    if (initial == null) return;
-    state = AsyncValue<ProjectsPageState>.data(initial.copyWith(isSearchingDeeper: true));
-    try {
-      for (int i = 0; i < maxPages; i++) {
-        final ProjectsPageState? current = state.valueOrNull;
-        if (current == null || !current.hasMore) return;
-        await loadMore();
-      }
-    } finally {
-      final ProjectsPageState? finalState = state.valueOrNull;
-      if (finalState != null) {
-        state = AsyncValue<ProjectsPageState>.data(finalState.copyWith(isSearchingDeeper: false));
-      }
-    }
-  }
-
+  /// Pull-to-refresh: re-downloads the catalogue, keeping the current list
+  /// on screen until it arrives.
   Future<void> refresh() async {
-    state = const AsyncValue<ProjectsPageState>.loading();
-    state = await AsyncValue.guard(() async {
-      final PagedResult<ProjectModel> page = await ref.read(projectsRepositoryProvider).getFirstPage();
-      return ProjectsPageState(items: page.items, nextPageUrl: page.nextPageUrl, totalCount: page.count);
-    });
+    final ProjectsPageState? current = state.valueOrNull;
+    try {
+      final RankedCatalog full =
+          await ref.read(projectsRepositoryProvider).downloadCatalog();
+      state = AsyncValue<ProjectsPageState>.data(_stateOf(full));
+    } catch (e, st) {
+      if (current == null) state = AsyncValue<ProjectsPageState>.error(e, st);
+    }
   }
 }
 
@@ -154,21 +92,13 @@ final AsyncNotifierProvider<ProjectsController, ProjectsPageState> projectsProvi
     AsyncNotifierProvider<ProjectsController, ProjectsPageState>(ProjectsController.new);
 
 /// Single project lookup for the Property Details screen, keyed by id.
-/// Merges with a cached list-summary (if one is available in the already
-/// loaded [projectsProvider] state) so nothing known from the list view —
-/// like the fuller developer profile — is lost.
+/// Merges with the catalogue's list summary (if loaded) so nothing known
+/// from the list view — like the fuller developer profile — is lost.
 final FutureProviderFamily<ProjectModel, int> projectDetailsProvider =
     FutureProvider.family<ProjectModel, int>((Ref ref, int id) async {
   final ProjectsPageState? loaded = ref.watch(projectsProvider).valueOrNull;
-  ProjectModel? cached;
-  if (loaded != null) {
-    for (final ProjectModel p in loaded.items) {
-      if (p.id == id) {
-        cached = p;
-        break;
-      }
-    }
-  }
+  final ProjectModel? cached =
+      loaded?.items.where((ProjectModel p) => p.id == id).firstOrNull;
   final ProjectModel project =
       await ref.watch(projectsRepositoryProvider).getById(id, cached: cached);
   // Guest-access data plumbing: keep a local "recently viewed" trail
@@ -177,11 +107,19 @@ final FutureProviderFamily<ProjectModel, int> projectDetailsProvider =
   return project;
 });
 
-/// All of one developer's projects for the Developer Details screen,
-/// keyed by the developer's `/developers` directory id — fetched with the
-/// API's server-side `developer` filter rather than by loading the whole
-/// catalog into [projectsProvider] and filtering it on-device.
+/// All of one developer's listable projects, in Best Match order — from
+/// the catalogue once it's fully loaded, or the API's server-side
+/// `developer` filter while it's still downloading.
 final FutureProviderFamily<List<ProjectModel>, int> developerProjectsProvider =
-    FutureProvider.family<List<ProjectModel>, int>((Ref ref, int developerId) {
-  return ref.watch(projectsRepositoryProvider).getProjectsByDeveloper(developerId);
+    FutureProvider.family<List<ProjectModel>, int>((Ref ref, int developerId) async {
+  final ProjectsPageState state = await ref.watch(projectsProvider.future);
+  if (!state.isLoadingCatalog) {
+    return state.items
+        .where((ProjectModel p) => p.developer.id == developerId)
+        .toList();
+  }
+  final List<ProjectModel> fetched = await ref
+      .watch(projectsRepositoryProvider)
+      .getProjectsByDeveloper(developerId);
+  return state.engine.rank(fetched);
 });

@@ -265,6 +265,11 @@ class ProjectModel {
     required this.developer,
     required this.subunitCount,
     this.updatedAt,
+    this.constructionStartDate,
+    this.coverWidth = 0,
+    this.isPartnerProject = false,
+    this.maxArea = 0,
+    this.maxBedrooms,
     this.salesStatusLabel,
     this.description,
     this.completionRate,
@@ -301,6 +306,9 @@ class ProjectModel {
   final int propertyTypeCode;
   final String propertyType; // joined available_unit_types_display, e.g. "Apartment, Villa"
   final int propertyStatusCode; // 1 = Ready, 2 = Off-Plan (see propertyStatusLabel)
+  /// Reelly's `sale_status`: 1 = on_sale, 2 = out_of_stock, 3 = presale,
+  /// 4 = announced, 5 = start_of_sales, 0 = unknown. See [isSoldOut] and
+  /// [isNewLaunch].
   final int salesStatusCode;
   final NamedRef city;
   final NamedRef district;
@@ -310,6 +318,23 @@ class ProjectModel {
   final DeveloperModel developer;
   final SubunitCount subunitCount;
   final DateTime? updatedAt;
+
+  /// Reelly's `construction_start_date` — roughly when the project
+  /// launched; null for ~24% of projects. Used by [RankingEngine].
+  final DateTime? constructionStartDate;
+
+  /// Pixel width of [cover] from the API's image metadata (0 if unknown) —
+  /// [RankingEngine]'s image-quality signal.
+  final int coverWidth;
+
+  /// Reelly's `is_partner_project`.
+  final bool isPartnerProject;
+
+  /// Reelly's `max_size` (sq.ft) — the largest unit; 0 when unknown.
+  final double maxArea;
+
+  /// Reelly's `max_bedrooms` (0 = studio); null when unknown.
+  final int? maxBedrooms;
 
   /// Populated directly from the API's `sale_status_display` string.
   final LocalizedText? salesStatusLabel;
@@ -332,6 +357,14 @@ class ProjectModel {
   final List<PropertyUnitModel> propertyUnits;
 
   bool get isDetailLoaded => description != null;
+
+  /// Reelly `sale_status == out_of_stock` — nothing left to buy, so
+  /// [ProjectsRepository] drops these from every list.
+  bool get isSoldOut => salesStatusCode == 2;
+
+  /// Presale, announced or start of sales — a launch that's just opening.
+  bool get isNewLaunch =>
+      salesStatusCode == 3 || salesStatusCode == 4 || salesStatusCode == 5;
 
   /// True for a project still marked "Off-Plan" whose handover date has
   /// already passed — almost certainly stale/uncorrected source data
@@ -570,7 +603,14 @@ class ProjectModel {
       propertyTypeCode: 0,
       propertyType: unitTypes.join(', '),
       propertyStatusCode: json['construction_status'] == 'completed' ? 1 : 2,
-      salesStatusCode: 0,
+      salesStatusCode: switch (json['sale_status']) {
+        'on_sale' => 1,
+        'out_of_stock' => 2,
+        'presale' => 3,
+        'announced' => 4,
+        'start_of_sales' => 5,
+        _ => 0,
+      },
       salesStatusLabel: LocalizedText.fromJson(json['sale_status_display']),
       // Reelly sometimes sends `city` as a numeric id rather than a name
       // (seen when `region` is empty), so these are read leniently.
@@ -586,6 +626,15 @@ class ProjectModel {
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'] as String)
           : null,
+      constructionStartDate: json['construction_start_date'] is String
+          ? DateTime.tryParse(json['construction_start_date'] as String)
+          : null,
+      coverWidth: ((json['cover_image'] as Map<String, dynamic>?)?['metadata']
+              as Map<String, dynamic>?)?['width'] as int? ??
+          0,
+      isPartnerProject: json['is_partner_project'] as bool? ?? false,
+      maxArea: (json['max_size'] as num?)?.toDouble() ?? 0,
+      maxBedrooms: (json['max_bedrooms'] as num?)?.toInt(),
       description: LocalizedText(
           en: json['overview'] as String? ??
               json['short_description'] as String? ??
@@ -716,6 +765,12 @@ class ProjectModel {
           ? detail.subunitCount
           : subunitCount,
       updatedAt: detail.updatedAt ?? updatedAt,
+      constructionStartDate:
+          detail.constructionStartDate ?? constructionStartDate,
+      coverWidth: detail.coverWidth != 0 ? detail.coverWidth : coverWidth,
+      isPartnerProject: detail.isPartnerProject,
+      maxArea: detail.maxArea != 0 ? detail.maxArea : maxArea,
+      maxBedrooms: detail.maxBedrooms ?? maxBedrooms,
       description: detail.description ?? description,
       completionRate: detail.completionRate ?? completionRate,
       rentalGuarantee: detail.rentalGuarantee ?? rentalGuarantee,
@@ -763,6 +818,11 @@ class ProjectModel {
       developer: developer,
       subunitCount: subunitCount,
       updatedAt: updatedAt,
+      constructionStartDate: constructionStartDate,
+      coverWidth: coverWidth,
+      isPartnerProject: isPartnerProject,
+      maxArea: maxArea,
+      maxBedrooms: maxBedrooms,
       description: description,
       completionRate: completionRate,
       rentalGuarantee: rentalGuarantee,

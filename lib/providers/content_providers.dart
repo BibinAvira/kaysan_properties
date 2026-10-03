@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/project_model.dart';
 import '../models/supporting_models.dart';
+import '../repositories/projects_repository.dart' show featuredDeveloperIds;
 import 'di_providers.dart';
 import 'projects_provider.dart';
 import '../services/projects_service.dart';
@@ -38,12 +39,6 @@ final FutureProvider<List<DeveloperModel>> developersProvider =
     ...all.where((DeveloperModel d) => !featuredDeveloperIds.contains(d.id)),
   ];
 });
-
-/// Reelly `/developers` ids the client wants shown first: Emaar, DAMAC,
-/// Sobha, Nakheel, Meraas, Ellington, Binghatti, Azizi, Danube, ALDAR.
-const List<int> featuredDeveloperIds = <int>[
-  72, 12, 56, 75, 68, 44, 80, 38, 32, 46,
-];
 
 final FutureProvider<List<BlogModel>> blogsProvider = FutureProvider<List<BlogModel>>((Ref ref) {
   return ref.watch(blogsRepositoryProvider).getBlogs();

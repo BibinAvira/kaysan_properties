@@ -9,6 +9,7 @@ import '../../providers/content_providers.dart';
 import '../../providers/favorites_provider.dart';
 import '../../providers/projects_provider.dart';
 import '../../repositories/projects_repository.dart';
+import '../../repositories/ranking_engine.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/loading_shimmer.dart';
 import '../../widgets/property_card.dart';
@@ -99,9 +100,8 @@ class AreasView extends ConsumerWidget {
   }
 }
 
-/// Area Details — every one of that district's projects, not just whatever
-/// happened to already be loaded from the main feed's pagination (mirrors
-/// [DeveloperDetailsView]'s use of [ProjectsController.loadAll]).
+/// Area Details — every one of that district's projects from the ranked
+/// catalogue, in Best Match order unless another sort is picked.
 class AreaDetailsView extends ConsumerStatefulWidget {
   const AreaDetailsView({super.key, required this.districtId});
   final int districtId;
@@ -112,57 +112,19 @@ class AreaDetailsView extends ConsumerStatefulWidget {
 
 class _AreaDetailsViewState extends ConsumerState<AreaDetailsView> {
   String? _developerName;
-  ProjectSort _sort = ProjectSort.recommended;
+  ProjectSort _sort = ProjectSort.bestMatch;
 
-  @override
-  void initState() {
-    super.initState();
-    // "This area's projects" means all of them — not just whichever page
-    // happened to load first — so pull in the rest of the catalog once, in
-    // the background, past whatever's already loaded.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(projectsProvider.notifier).loadAll();
-    });
-  }
-
-  /// Sold-out projects sink to the end regardless of [_sort] — a plain
-  /// price/handover/recommended sort otherwise has no opinion on sales
-  /// status, so a sold-out project can land first just by being cheapest or
-  /// soonest to hand over, ahead of everything a visitor can still buy.
-  ///
-  /// Reelly's own label for this is "Out of Stock" (confirmed against the
-  /// live `/projects/sale-statuses` dictionary: Announced, On Sale, Out of
-  /// Stock, Presale (EOI), Start of Sales) — matching on "sold" alone, as
-  /// if this API used the same wording as the old backend, never actually
-  /// matched anything.
-  static bool _isSoldOut(ProjectModel p) {
-    final String status = p.salesStatusDisplay.toLowerCase();
-    return status.contains('sold') || status.contains('out of stock');
-  }
-
-  List<ProjectModel> _applyFilterAndSort(List<ProjectModel> source) {
+  /// [source] is already Best Match ordered (and sold-out free — see
+  /// [RankingEngine.isListable]); any other sort re-orders it via [engine].
+  List<ProjectModel> _applyFilterAndSort(
+      List<ProjectModel> source, RankingEngine engine) {
     Iterable<ProjectModel> result = source;
     if (_developerName != null) {
       result =
           result.where((ProjectModel p) => p.developer.name == _developerName);
     }
-    final List<ProjectModel> list = result.toList();
-    switch (_sort) {
-      case ProjectSort.priceLowToHigh:
-        list.sort((ProjectModel a, ProjectModel b) =>
-            a.lowPrice.compareTo(b.lowPrice));
-        break;
-      case ProjectSort.priceHighToLow:
-        list.sort((ProjectModel a, ProjectModel b) =>
-            b.lowPrice.compareTo(a.lowPrice));
-        break;
-      case ProjectSort.recommended:
-        break;
-    }
-    final List<ProjectModel> available =
-        list.where((ProjectModel p) => !_isSoldOut(p)).toList();
-    final List<ProjectModel> soldOut = list.where(_isSoldOut).toList();
-    return <ProjectModel>[...available, ...soldOut];
+    if (_sort == ProjectSort.bestMatch) return result.toList();
+    return engine.sort(result, _sort);
   }
 
   void _openFilterSheet(List<ProjectModel> inArea) {
@@ -274,16 +236,7 @@ class _AreaDetailsViewState extends ConsumerState<AreaDetailsView> {
     );
   }
 
-  String _sortLabel(ProjectSort sort) {
-    switch (sort) {
-      case ProjectSort.recommended:
-        return 'Recommended';
-      case ProjectSort.priceLowToHigh:
-        return 'Price: Low to High';
-      case ProjectSort.priceHighToLow:
-        return 'Price: High to Low';
-    }
-  }
+  String _sortLabel(ProjectSort sort) => sort.label;
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +256,8 @@ class _AreaDetailsViewState extends ConsumerState<AreaDetailsView> {
         final List<ProjectModel> allInArea = state.items
             .where((ProjectModel p) => p.district.id == widget.districtId)
             .toList();
-        final List<ProjectModel> inArea = _applyFilterAndSort(allInArea);
+        final List<ProjectModel> inArea =
+            _applyFilterAndSort(allInArea, state.engine);
         final String areaName = allInArea.isNotEmpty
             ? allInArea.first.district.name.display
             : 'Area';
@@ -319,9 +273,9 @@ class _AreaDetailsViewState extends ConsumerState<AreaDetailsView> {
             ],
           ),
           body: RefreshIndicator(
-            onRefresh: () => ref.read(projectsProvider.notifier).loadAll(),
+            onRefresh: () => ref.read(projectsProvider.notifier).refresh(),
             child: inArea.isEmpty
-                ? (state.isSearchingDeeper
+                ? (state.isLoadingCatalog
                     ? const PropertyGridShimmer()
                     : const EmptyStateView(
                         icon: Icons.map_outlined,

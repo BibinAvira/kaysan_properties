@@ -165,17 +165,27 @@ class TopPropertyCard extends StatelessWidget {
                             valueColor: AppColors.gold,
                           ),
                         ),
-                        if (handover != null) ...<Widget>[
+                        if (project.propertyStatusCode == 1 ||
+                            handover != null) ...<Widget>[
                           Container(
                               width: 1,
                               height: 30,
                               color: theme.dividerColor),
                           const SizedBox(width: 14),
                           Expanded(
-                            child: _Spec(
-                              label: 'Handover',
-                              value: DateFormat('MMM yyyy').format(handover),
-                            ),
+                            // A finished building's completion date is in
+                            // the past and reads like a stale listing date.
+                            child: project.propertyStatusCode == 1
+                                ? const _Spec(
+                                    label: 'Status',
+                                    value: 'Ready to move',
+                                    valueColor: AppColors.success,
+                                  )
+                                : _Spec(
+                                    label: 'Handover',
+                                    value:
+                                        DateFormat('MMM yyyy').format(handover!),
+                                  ),
                           ),
                         ],
                       ],

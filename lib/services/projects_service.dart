@@ -42,7 +42,7 @@ class ProjectsService {
     int limit = 100,
     int offset = 0,
     String? search,
-    int? developerId,
+    List<int>? developerIds,
     String? region,
     int? districtId,
     double? minPrice,
@@ -52,50 +52,106 @@ class ProjectsService {
   }) {
     return _api.get(
       '/projects',
-      queryParameters: <String, dynamic>{
-        'limit': limit,
-        'offset': offset,
-        if (search != null && search.isNotEmpty) 'search': search,
-        // Undocumented, but honoured server-side: takes the numeric id
-        // from the `/developers` directory (not the name).
-        if (developerId != null) 'developer': developerId,
-        // Also undocumented: a case-insensitive name match on
-        // `location.region` ("Dubai" also covers "Dubai Emirate").
-        if (region != null &&
-            region.isNotEmpty &&
-            region != internationalRegion)
-          'region': region,
-        // "International": Reelly has no "not this country" filter, but
-        // `countries=` takes a comma list of ids, so ask for every id but
-        // the UAE's. (Ids beyond this range don't exist today.)
-        if (region == internationalRegion)
-          'countries': <int>[
-            for (int id = 1; id <= 300; id++)
-              if (id != uaeCountryId) id,
-          ].join(','),
-        // Also undocumented: note the plural — singular `district=` is
-        // silently ignored. Takes a `/districts` directory id.
-        if (districtId != null) 'districts': districtId,
-        // Also undocumented: matches projects with *any* unit in range —
-        // max_price >= from and min_price <= to. Unpriced projects drop out.
-        if (minPrice != null) 'unit_price_from': minPrice.round(),
-        if (maxPrice != null) 'unit_price_to': maxPrice.round(),
-        // Also undocumented: one `construction_status` value per request
-        // (completed / under_construction / presale); lists aren't accepted.
-        if (status != null) 'status': status,
-        // Also undocumented: `min_price` / `-min_price` sort the whole
-        // result set (handover date isn't sortable).
-        if (ordering != null) 'ordering': ordering,
-        ..._localeParams,
-      },
+      queryParameters: _projectsQuery(
+        limit: limit,
+        offset: offset,
+        search: search,
+        developerIds: developerIds,
+        region: region,
+        districtId: districtId,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        status: status,
+        ordering: ordering,
+      ),
     );
   }
 
-  /// Follows a full `next` URL returned by a previous page — used by
-  /// pagination controllers instead of reconstructing `?offset=N` by hand,
-  /// since the server-given URL is guaranteed correct.
-  Future<Map<String, dynamic>> fetchProjectsByUrlRaw(String url) =>
-      _api.getAbsolute(url);
+  /// Every `/projects` record as raw JSON — the whole catalogue (~2,200
+  /// projects, 23 pages of 100), for on-device ranking. Pages after the
+  /// first are fetched [parallel] at a time: fast, without hammering the
+  /// API. One page failing fails the whole download, so a partial
+  /// catalogue is never cached as if it were complete.
+  Future<List<Map<String, dynamic>>> fetchAllProjectsRaw({
+    int pageSize = 100,
+    int parallel = 4,
+  }) async {
+    final Map<String, dynamic> first =
+        await fetchProjectsPageRaw(limit: pageSize);
+    final int count = first['count'] as int? ?? 0;
+    final List<Map<String, dynamic>> all = <Map<String, dynamic>>[
+      ..._results(first),
+    ];
+    final List<int> offsets = <int>[
+      for (int o = pageSize; o < count; o += pageSize) o,
+    ];
+    for (int i = 0; i < offsets.length; i += parallel) {
+      final List<Map<String, dynamic>> pages = await Future.wait(
+        offsets.skip(i).take(parallel).map((int offset) =>
+            fetchProjectsPageRaw(limit: pageSize, offset: offset)),
+      );
+      for (final Map<String, dynamic> page in pages) {
+        all.addAll(_results(page));
+      }
+    }
+    return all;
+  }
+
+  static List<Map<String, dynamic>> _results(Map<String, dynamic> page) =>
+      (page['results'] as List<dynamic>? ?? <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+  Map<String, dynamic> _projectsQuery({
+    required int limit,
+    required int offset,
+    String? search,
+    List<int>? developerIds,
+    String? region,
+    int? districtId,
+    double? minPrice,
+    double? maxPrice,
+    String? status,
+    String? ordering,
+  }) {
+    return <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+      if (search != null && search.isNotEmpty) 'search': search,
+      // Undocumented, but honoured server-side: numeric ids from the
+      // `/developers` directory (not names), comma-separated for several.
+      if (developerIds != null && developerIds.isNotEmpty)
+        'developer': developerIds.join(','),
+      // Also undocumented: a case-insensitive name match on
+      // `location.region` ("Dubai" also covers "Dubai Emirate").
+      if (region != null &&
+          region.isNotEmpty &&
+          region != internationalRegion)
+        'region': region,
+      // "International": Reelly has no "not this country" filter, but
+      // `countries=` takes a comma list of ids, so ask for every id but
+      // the UAE's. (Ids beyond this range don't exist today.)
+      if (region == internationalRegion)
+        'countries': <int>[
+          for (int id = 1; id <= 300; id++)
+            if (id != uaeCountryId) id,
+        ].join(','),
+      // Also undocumented: note the plural — singular `district=` is
+      // silently ignored. Takes a `/districts` directory id.
+      if (districtId != null) 'districts': districtId,
+      // Also undocumented: matches projects with *any* unit in range —
+      // max_price >= from and min_price <= to. Unpriced projects drop out.
+      if (minPrice != null) 'unit_price_from': minPrice.round(),
+      if (maxPrice != null) 'unit_price_to': maxPrice.round(),
+      // Also undocumented: one `construction_status` value per request
+      // (completed / under_construction / presale); lists aren't accepted.
+      if (status != null) 'status': status,
+      // Also undocumented: `min_price` / `-min_price` sort the whole
+      // result set (handover date isn't sortable).
+      if (ordering != null) 'ordering': ordering,
+        ..._localeParams,
+    };
+  }
 
   Future<Map<String, dynamic>> fetchProjectByIdRaw(int id) =>
       _api.get('/projects/$id', queryParameters: _localeParams);

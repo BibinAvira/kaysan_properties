@@ -16,9 +16,9 @@ import '../../../widgets/loading_shimmer.dart';
 import 'home_header.dart';
 import 'top_property_card.dart';
 
-/// Hero carousel — the newest live listings, most-recently-updated first.
-/// (The API has no "featured" flag, so this uses the first page of the
-/// live feed rather than a curated/editorial set.)
+/// Hero carousel — the top six Best Match listings (see [RankingEngine]).
+/// The API has no editorial "featured" flag, so this is the ranking's
+/// pick rather than a hand-curated set.
 class HeroCarousel extends ConsumerWidget {
   const HeroCarousel({super.key});
 
@@ -257,8 +257,8 @@ class PopularAreasSection extends ConsumerWidget {
 /// "Top Property" — respects the All / Off-Plan / Ready tabs above it (see
 /// [homeStatusFilterProvider]) and shows the single best-matching property
 /// as a [TopPropertyCard] (Home-only design).
-/// The API has no curated "featured" flag: this is the newest match (or,
-/// for Off-Plan, the soonest handover).
+/// The API has no curated "featured" flag: this is the top Best Match
+/// (see [RankingEngine]) for the selected tab.
 class TopPropertySection extends ConsumerWidget {
   const TopPropertySection(
       {super.key, this.title = 'Top Property', this.take = 10});
@@ -295,23 +295,19 @@ class TopPropertySection extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodyMedium),
           ),
           data: (ProjectsPageState state) {
+            // Already in Best Match order — see [RankingEngine].
             final List<ProjectModel> matches = statusFilter == null
                 ? state.items
                 : state.items
                     .where((ProjectModel p) =>
                         p.propertyStatusCode == statusFilter)
                     .toList();
-            // Off-Plan: soonest handover first. Ready (and "All Projects"):
-            // left in the API's own newest-added-first order.
-            if (statusFilter == 2) {
-              matches.sort(ProjectModel.compareHandoverSoonest);
-            }
             if (matches.isEmpty) {
               // A status filter was just picked and nothing loaded so far
               // matches — HomeStatusFilterController.set already kicked
               // off fetching further pages; show that instead of a flat
               // "nothing here", since a match will very likely show up.
-              if (state.isSearchingDeeper) return const FeaturedCardShimmer();
+              if (state.isLoadingCatalog) return const FeaturedCardShimmer();
               return Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

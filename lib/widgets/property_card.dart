@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../core/theme/app_colors.dart';
@@ -10,8 +12,9 @@ import 'common_widgets.dart';
 /// stays consistent everywhere a property is listed.
 ///
 /// "Photo overlay" design: the photo fills the whole card, a dark fade at
-/// the bottom carries the name, "developer · area", and two pills —
-/// handover date and the gold price.
+/// the bottom carries the name, "developer · area", and a frosted glass
+/// strip with the starting price and the handover month (or "Ready to
+/// move" for finished buildings).
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
     super.key,
@@ -36,6 +39,7 @@ class PropertyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isReady = project.propertyStatusCode == 1;
     final DateTime? handover = project.handoverDate;
     final String subtitle = <String>[
       project.developer.name,
@@ -114,34 +118,7 @@ class PropertyCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 10),
-                    // One row on every card (a Wrap put the second pill on
-                    // its own line on narrow cards, so cards didn't match).
-                    // Price first; either pill shortens with "…" if needed.
-                    Row(
-                      children: <Widget>[
-                        Flexible(
-                          child: _Pill(
-                            text: project.lowPrice > 0
-                                ? Formatters.priceCompact(project.lowPrice)
-                                : 'On Request',
-                            background: AppColors.goldLight,
-                            foreground: const Color(0xFF1C1400),
-                            bold: true,
-                          ),
-                        ),
-                        if (handover != null) ...<Widget>[
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: _Pill(
-                              text: DateFormat('MMM yyyy').format(handover),
-                              background: Colors.black.withValues(alpha: 0.45),
-                              foreground: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                    ..._priceAndHandover(isReady, handover),
                   ],
                 ),
               ),
@@ -151,44 +128,80 @@ class PropertyCard extends StatelessWidget {
       ),
     );
   }
+  /// A frosted glass strip under the name: the starting price, then the
+  /// handover month (off-plan) or "Ready to move" (a finished building,
+  /// whose past completion date read like a stale listing date).
+  List<Widget> _priceAndHandover(bool isReady, DateTime? handover) {
+    final String price = project.lowPrice > 0
+        ? Formatters.priceCompact(project.lowPrice)
+        : 'On Request';
+    final bool showWhen = isReady || handover != null;
+    return <Widget>[
+      const SizedBox(height: 8),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+            ),
+            child: Column(
+              children: <Widget>[
+                _GlassRow(
+                    label: 'Starting',
+                    value: price,
+                    valueColor: AppColors.goldLight),
+                if (showWhen) ...<Widget>[
+                  const SizedBox(height: 3),
+                  _GlassRow(
+                    label: isReady ? 'Status' : 'Handover',
+                    value: isReady
+                        ? 'Ready to move'
+                        : DateFormat('MMM yyyy').format(handover!),
+                    valueColor: isReady ? _readyOnDark : Colors.white,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// [AppColors.success] lifted for legibility on the dark photo fade.
+  static const Color _readyOnDark = Color(0xFF7FE3AE);
 }
 
-/// Small rounded label on the photo (handover date, price).
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.text,
-    required this.background,
-    required this.foreground,
-    this.bold = false,
-  });
-
-  final String text;
-  final Color background;
-  final Color foreground;
-  final bool bold;
+/// One label/value row in the card's glass strip.
+class _GlassRow extends StatelessWidget {
+  const _GlassRow(
+      {required this.label, required this.value, required this.valueColor});
+  final String label;
+  final String value;
+  final Color valueColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: foreground,
-          fontSize: 10.5,
-          height: 1.25,
-          fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
-        ),
-      ),
+    return Row(
+      children: <Widget>[
+        Text(label,
+            style: TextStyle(
+                fontSize: 10, color: Colors.white.withValues(alpha: 0.8))),
+        const Spacer(),
+        Text(value,
+            maxLines: 1,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600, color: valueColor)),
+      ],
     );
   }
 }
+
 
 /// White round heart in a 44px tap area in the photo's top-right corner.
 class _FavoriteButton extends StatelessWidget {

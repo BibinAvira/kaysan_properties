@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/project_model.dart';
 import '../../../providers/content_providers.dart';
 import '../../../providers/search_provider.dart';
@@ -10,7 +11,7 @@ import '../../../services/projects_service.dart';
 /// Filter sheet ("Form Fields" design) for Listings, also opened from the
 /// Home filter button via [onShowResults]: Area and Developer are dropdown
 /// fields that open a searchable list, Region is a row of chips, then the
-/// max-price slider and Sort. It opens pre-filled with the filters already
+/// max-price slider, the handover date range and Sort. It opens pre-filled with the filters already
 /// applied; nothing changes until "Search" (or "Reset").
 ///
 /// Area uses Reelly's full `/districts` list and, like region, developer
@@ -55,7 +56,9 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
   DeveloperModel? _developer;
   String? _region;
   double _maxPriceStop = _lastStop * 1.0;
-  ProjectSort _sort = ProjectSort.recommended;
+  DateTime? _handoverFrom;
+  DateTime? _handoverTo;
+  ProjectSort _sort = ProjectSort.bestMatch;
 
   /// True while a picker is opening or open. The first Area open waits for
   /// the area list to download; a second tap in that time used to stack a
@@ -77,6 +80,8 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
           id: current.developerId!, name: current.developerName ?? '');
     }
     _region = current.region;
+    _handoverFrom = current.handoverFrom;
+    _handoverTo = current.handoverTo;
     _sort = current.sort;
     final double? max = current.maxPrice;
     if (max != null) {
@@ -95,6 +100,7 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
     controller.setDeveloper(_developer?.id, name: _developer?.name);
     final int to = _maxPriceStop.round();
     controller.setPriceRange(null, to < _lastStop ? _priceStops[to] : null);
+    controller.setHandoverRange(_handoverFrom, _handoverTo);
     controller.setSort(_sort);
     Navigator.of(context).pop();
     widget.onShowResults?.call();
@@ -106,7 +112,9 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
       _developer = null;
       _region = null;
       _maxPriceStop = _lastStop * 1.0;
-      _sort = ProjectSort.recommended;
+      _handoverFrom = null;
+      _handoverTo = null;
+      _sort = ProjectSort.bestMatch;
     });
     ref.read(projectFilterProvider.notifier).clearSheetFilters();
   }
@@ -126,11 +134,7 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
     return 'Up to AED ${_aed(_priceStops[to])}';
   }
 
-  static String _sortLabel(ProjectSort sort) => switch (sort) {
-        ProjectSort.recommended => 'Recommended',
-        ProjectSort.priceLowToHigh => 'Price: Low to High',
-        ProjectSort.priceHighToLow => 'Price: High to Low',
-      };
+  static String _sortLabel(ProjectSort sort) => sort.label;
 
   Future<void> _pickArea() async {
     final List<AreaRef> all =
@@ -168,6 +172,33 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
       searchHint: 'Search developers',
     );
     if (pick != null) setState(() => _developer = pick.value);
+  }
+
+  static final DateTime _firstHandover = DateTime(2015);
+  static final DateTime _lastHandover = DateTime(2040, 12, 31);
+
+  /// Opens a date picker for one end of the handover range. Each end is
+  /// bounded by the other, so "From" can never land after "To".
+  Future<void> _pickHandover({required bool isFrom}) async {
+    final DateTime first =
+        isFrom ? _firstHandover : (_handoverFrom ?? _firstHandover);
+    final DateTime last =
+        isFrom ? (_handoverTo ?? _lastHandover) : _lastHandover;
+    DateTime initial =
+        (isFrom ? _handoverFrom : _handoverTo) ?? DateTime.now();
+    if (initial.isBefore(first)) initial = first;
+    if (initial.isAfter(last)) initial = last;
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      useRootNavigator: true,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      initialDatePickerMode: DatePickerMode.year,
+      helpText: isFrom ? 'Handover from' : 'Handover until',
+    );
+    if (picked == null) return;
+    setState(() => isFrom ? _handoverFrom = picked : _handoverTo = picked);
   }
 
   Future<void> _pickSort() async {
@@ -293,6 +324,50 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
                     onChanged: (double v) => setState(() => _maxPriceStop = v),
                   ),
                   const SizedBox(height: 6),
+                  Row(
+                    children: <Widget>[
+                      Expanded(child: Text('Handover date', style: labelStyle)),
+                      if (_handoverFrom != null || _handoverTo != null)
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _handoverFrom = null;
+                            _handoverTo = null;
+                          }),
+                          child: Text('Clear',
+                              style: theme.textTheme.labelMedium
+                                  ?.copyWith(color: AppColors.gold)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: _DropdownField(
+                          value: _handoverFrom == null
+                              ? null
+                              : Formatters.monthYear(_handoverFrom!),
+                          placeholder: 'From',
+                          icon: Icons.calendar_today_outlined,
+                          onTap: () =>
+                              _once(() => _pickHandover(isFrom: true)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DropdownField(
+                          value: _handoverTo == null
+                              ? null
+                              : Formatters.monthYear(_handoverTo!),
+                          placeholder: 'To',
+                          icon: Icons.calendar_today_outlined,
+                          onTap: () =>
+                              _once(() => _pickHandover(isFrom: false)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
                   Text('Sort by', style: labelStyle),
                   const SizedBox(height: 8),
                   _DropdownField(
@@ -336,17 +411,19 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
 }
 
 /// A white field showing the current choice (or a grey example) with a
-/// chevron; tapping opens its picker.
+/// chevron (or [icon]); tapping opens its picker.
 class _DropdownField extends StatelessWidget {
   const _DropdownField({
     required this.value,
     required this.placeholder,
     required this.onTap,
+    this.icon = Icons.keyboard_arrow_down_rounded,
   });
 
   final String? value;
   final String placeholder;
   final VoidCallback onTap;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +454,7 @@ class _DropdownField extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(Icons.keyboard_arrow_down_rounded,
+              Icon(icon, size: icon == Icons.keyboard_arrow_down_rounded ? 24 : 18,
                   color: AppColors.textSecondaryLight),
               const SizedBox(width: 12),
             ],

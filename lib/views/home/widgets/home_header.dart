@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/guest_gate.dart';
 import '../../../core/routes/route_names.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../models/project_model.dart';
-import '../../../providers/projects_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../widgets/common_widgets.dart';
 import '../../../models/auth_models.dart';
@@ -22,17 +20,6 @@ class HomeStatusFilterController extends Notifier<int?> {
 
   void set(int? value) {
     state = value;
-    if (value == null) return;
-    // Only page 1 (now up to 100 items) is loaded by default. If none of
-    // those happen to be e.g. "Ready" — plausible, since off-plan listings
-    // dominate a newest-first feed — keep fetching further pages rather
-    // than showing "no properties" for a status that does exist deeper in
-    // the catalog. See ProjectFilterController._searchDeeperIfNeeded for
-    // the same pattern on the Listings screen.
-    ref.read(projectsProvider.notifier).loadUntilMatch(
-          (List<ProjectModel> items) =>
-              items.any((ProjectModel p) => p.propertyStatusCode == value),
-        );
   }
 }
 
